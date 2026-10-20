@@ -27,6 +27,9 @@ public class WheelTest extends LinearOpMode {
         int selected = 0;
         boolean upWas = false, downWas = false, bWas = false;
         String message = "";
+        int[] startTicks = new int[4];
+        boolean[] encoderSeen = new boolean[4];
+        for (int i = 0; i < 4; i++) startTicks[i] = wheels.motors[i].getCurrentPosition();
 
         telemetry.addLine("<big><b>Wheel Test</b></big>");
         telemetry.addLine("Wheels OFF the ground, then press ▶.");
@@ -61,6 +64,11 @@ public class WheelTest extends LinearOpMode {
             telemetry.addLine(String.format("Selected: <b>%s</b> (port %d, config name %s, %s)",
                     DriveWheels.LABELS[selected], DriveWheels.PORTS[selected], DriveWheels.NAMES[selected],
                     wheels.reversed[selected] ? "reversed" : "not reversed"));
+            int ticks = wheels.motors[selected].getCurrentPosition() - startTicks[selected];
+            if (Math.abs(ticks) > 50) encoderSeen[selected] = true;
+            telemetry.addLine(String.format("Encoder: %d ticks  %s", ticks,
+                    encoderSeen[selected] ? (ticks >= 0 ? "<font color='#69f0ae'>connected</font>" : "<font color='#ffb74d'>connected, counts backward</font>")
+                                          : "<small>(spin it; stays 0 = no encoder cable, that's OK)</small>"));
             telemetry.addLine("<b>Hold A</b>: only this wheel should spin, rolling FORWARD.");
             telemetry.addLine("Rolls backward? Press <b>B</b> to flip it.");
             telemetry.addLine("A <i>different</i> wheel spins? Its cable is in the wrong port: swap cables.");

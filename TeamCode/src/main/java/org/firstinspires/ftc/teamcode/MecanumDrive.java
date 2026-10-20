@@ -1,12 +1,15 @@
 package org.firstinspires.ftc.teamcode;
 
 import com.qualcomm.hardware.lynx.LynxModule;
+import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+import com.qualcomm.robotcore.hardware.IMU;
 import com.qualcomm.robotcore.hardware.VoltageSensor;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
+import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
 
 /*
@@ -16,6 +19,8 @@ import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
  * Right stick (side to side): spin in place.
  * D-pad: slow nudge while held, for lining up (only when the sticks are let go).
  * X button (blue): cycle speed  Normal -> Fast -> Slow -> Normal.
+ * BACK button: heading hold on/off. While on, the Control Hub's gyro keeps the robot pointing
+ *   the same way whenever you aren't using the spin stick, so it drives straight instead of drifting.
  *
  * Nothing here moves the robot on its own: it only moves while you hold a stick or the D-pad.
  * Wheel directions come from DriveWheels (fix a backward wheel with the Wheel Test op mode).
@@ -31,6 +36,10 @@ public class MecanumDrive extends LinearOpMode {
     private static final double NUDGE_POWER = 0.25;   // D-pad nudge speed
     private static final double RAMP_PER_SEC = 4.0;   // speeding up takes 1/4 s from stop to full (stopping is instant)
     private static final double LOW_BATTERY = 11.8;
+    private static final double SNAP = 0.2;           // nearly-straight stick pushes count as perfectly straight
+    private static final double HOLD_KP = 0.03;       // heading hold strength: turn power per degree off course
+    private static final double HOLD_MAX = 0.4;       // most turning heading hold may add
+    private static final double HOLD_SETTLE = 0.3;    // seconds after you let go of spin before it locks the heading
 
     @Override
     public void runOpMode() {
@@ -40,8 +49,21 @@ public class MecanumDrive extends LinearOpMode {
             hub.setBulkCachingMode(LynxModule.BulkCachingMode.AUTO); // faster hardware reads
         }
 
+        // Gyro inside the Control Hub ("imu" in the robot configuration). The hub lies flat, logo up.
+        IMU imu = null;
+        try {
+            imu = hardwareMap.get(IMU.class, "imu");
+            imu.initialize(new IMU.Parameters(new RevHubOrientationOnRobot(
+                    RevHubOrientationOnRobot.LogoFacingDirection.UP,
+                    RevHubOrientationOnRobot.UsbFacingDirection.FORWARD)));
+            imu.resetYaw();
+        } catch (RuntimeException e) {
+            imu = null;   // no "imu" in the configuration: drive without heading hold
+        }
+
         telemetry.setDisplayFormat(Telemetry.DisplayFormat.HTML);
         telemetry.addLine("<big><b>BioBuzz Mecanum Drive</b></big>");
+        if (imu == null) telemetry.addLine("<font color='#ffb74d'>No gyro named \"imu\" in the configuration, so heading hold is off.</font>");
         telemetry.addLine("Ready. Press ▶ to drive.");
         telemetry.addLine(controlsHelp());
         telemetry.update();
@@ -54,6 +76,12 @@ public class MecanumDrive extends LinearOpMode {
         double volts = battery.getVoltage();
         boolean warnedBattery = false;
         int loops = 0;
+        boolean holdOn = imu != null;
+        boolean backWasDown = false;
+        double heading = 0;
+        Double holdTarget = null;
+        double holdCorrection = 0;
+        ElapsedTime sinceSpin = new ElapsedTime();
         ElapsedTime loopTimer = new ElapsedTime();
         ElapsedTime matchTimer = new ElapsedTime();
 
@@ -69,8 +97,21 @@ public class MecanumDrive extends LinearOpMode {
             }
             xWasDown = xDown;
 
+            // BACK: heading hold on/off
+            boolean backDown = gamepad1.back;
+            if (backDown && !backWasDown && imu != null) {
+                holdOn = !holdOn;
+                holdTarget = null;
+                gamepad1.rumble(holdOn ? 100 : 300);
+            }
+            backWasDown = backDown;
+
             double forward = deadzone(-gamepad1.left_stick_y);  // stick up is negative, so flip it
-            double strafe  = deadzone(gamepad1.left_stick_x) * 1.1; // mecanum slides a bit weaker; small boost
+            double strafe  = deadzone(gamepad1.left_stick_x);
+            // Thumbs are never perfectly straight: a push that's almost straight up/sideways becomes exactly that
+            if (Math.abs(strafe) < SNAP * Math.abs(forward)) strafe = 0;
+            if (Math.abs(forward) < SNAP * Math.abs(strafe)) forward = 0;
+            strafe *= 1.1;                                       // mecanum slides a bit weaker; small boost
             double turn    = deadzone(gamepad1.right_stick_x);
             double power   = MODE_POWER[mode];
 
@@ -80,6 +121,22 @@ public class MecanumDrive extends LinearOpMode {
                 forward = (gamepad1.dpad_up ? 1 : 0) - (gamepad1.dpad_down ? 1 : 0);
                 strafe  = (gamepad1.dpad_right ? 1 : 0) - (gamepad1.dpad_left ? 1 : 0);
                 power   = NUDGE_POWER;
+            }
+
+            // Heading hold: while you're driving but not spinning, steer back to the way the robot was pointing
+            if (imu != null) heading = imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.DEGREES);
+            boolean driving = forward != 0 || strafe != 0;
+            if (turn != 0 || !holdOn) {
+                sinceSpin.reset();
+                holdTarget = null;
+            } else if (holdTarget == null && sinceSpin.seconds() > HOLD_SETTLE) {
+                holdTarget = heading;
+            }
+            holdCorrection = 0;
+            if (holdTarget != null && driving) {
+                double error = wrap(heading - holdTarget);   // positive = robot has rotated left
+                holdCorrection = Math.max(-HOLD_MAX, Math.min(HOLD_MAX, HOLD_KP * error / power));
+                turn = holdCorrection;
             }
 
             double[] target = {
@@ -120,6 +177,10 @@ public class MecanumDrive extends LinearOpMode {
             telemetry.addLine(String.format("Battery: <font color='%s'><b>%.2f V</b></font>%s    Time: %s",
                     volts < LOW_BATTERY ? "#ff5252" : "#69f0ae", volts,
                     volts < LOW_BATTERY ? "  LOW, swap soon" : "", clock(matchTimer.seconds())));
+            telemetry.addLine(imu == null ? "Heading hold: <font color='#ffb74d'>no gyro</font>"
+                    : String.format("Heading hold: %s   Facing %.0f°%s",
+                        holdOn ? "<font color='#69f0ae'><b>ON</b></font>" : "<font color='#9e9e9e'>off</font>",
+                        heading, holdCorrection != 0 ? String.format("   correcting %+.0f°", wrap(heading - holdTarget)) : ""));
             telemetry.addLine("<b>Wheels</b> (power, amps)");
             telemetry.addLine(String.format("<tt>FL %s %4.1fA    FR %s %4.1fA</tt>", wheel(applied[0]), amps[0], wheel(applied[1]), amps[1]));
             telemetry.addLine(String.format("<tt>BL %s %4.1fA    BR %s %4.1fA</tt>", wheel(applied[2]), amps[2], wheel(applied[3]), amps[3]));
@@ -135,9 +196,16 @@ public class MecanumDrive extends LinearOpMode {
         return Math.abs(v) < DEADZONE ? 0 : v;
     }
 
+    /** Angle difference folded into -180..180 degrees. */
+    private static double wrap(double degrees) {
+        while (degrees > 180) degrees -= 360;
+        while (degrees < -180) degrees += 360;
+        return degrees;
+    }
+
     private static String controlsHelp() {
         return "<small><font color='#9e9e9e'>Left stick: drive + slide · Right stick: spin · "
-             + "D-pad: nudge · X: speed</font></small>";
+             + "D-pad: nudge · X: speed · BACK: heading hold</font></small>";
     }
 
     private static String modeColor(int mode) {
