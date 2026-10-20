@@ -4,6 +4,14 @@ pluginManagement {
         mavenCentral()
         gradlePluginPortal()
     }
+    // Qustodio stalls plugin-marker lookups; point the Android plugin ids straight at the real artifact
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id.id == 'com.android.application' || requested.id.id == 'com.android.library') {
+                useModule("com.android.tools.build:gradle:${requested.version}")
+            }
+        }
+    }
 }
 
 include ':FtcRobotController'
