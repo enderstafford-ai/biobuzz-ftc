@@ -1,15 +1,12 @@
 package org.firstinspires.ftc.teamcode;
 
 import com.qualcomm.hardware.lynx.LynxModule;
-import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
-import com.qualcomm.robotcore.hardware.IMU;
 import com.qualcomm.robotcore.hardware.VoltageSensor;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
-import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
 
 /*
@@ -19,7 +16,7 @@ import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
  * Right stick (side to side): spin in place.
  * D-pad: slow nudge while held, for lining up (only when the sticks are let go).
  * X button (blue): cycle speed  Normal -> Fast -> Slow -> Normal.
- * BACK button: heading hold on/off. While on, the Control Hub's gyro keeps the robot pointing
+ * BACK button: heading hold on/off. While on, the gyro (Pinpoint, or the Control Hub's) keeps the robot pointing
  *   the same way whenever you aren't using the spin stick, so it drives straight instead of drifting.
  *
  * Nothing here moves the robot on its own: it only moves while you hold a stick or the D-pad.
@@ -49,21 +46,12 @@ public class MecanumDrive extends LinearOpMode {
             hub.setBulkCachingMode(LynxModule.BulkCachingMode.AUTO); // faster hardware reads
         }
 
-        // Gyro inside the Control Hub ("imu" in the robot configuration). The hub lies flat, logo up.
-        IMU imu = null;
-        try {
-            imu = hardwareMap.get(IMU.class, "imu");
-            imu.initialize(new IMU.Parameters(new RevHubOrientationOnRobot(
-                    RevHubOrientationOnRobot.LogoFacingDirection.UP,
-                    RevHubOrientationOnRobot.UsbFacingDirection.FORWARD)));
-            imu.resetYaw();
-        } catch (RuntimeException e) {
-            imu = null;   // no "imu" in the configuration: drive without heading hold
-        }
+        HeadingSensor gyro = new HeadingSensor(hardwareMap);
 
         telemetry.setDisplayFormat(Telemetry.DisplayFormat.HTML);
         telemetry.addLine("<big><b>BioBuzz Mecanum Drive</b></big>");
-        if (imu == null) telemetry.addLine("<font color='#ffb74d'>No gyro named \"imu\" in the configuration, so heading hold is off.</font>");
+        telemetry.addLine(gyro.available() ? "Gyro: " + gyro.sourceName() + ". Keep the robot still until you press ▶."
+                : "<font color='#ffb74d'>No \"pinpoint\" or \"imu\" in the configuration, so heading hold is off.</font>");
         telemetry.addLine("Ready. Press ▶ to drive.");
         telemetry.addLine(controlsHelp());
         telemetry.update();
@@ -76,7 +64,7 @@ public class MecanumDrive extends LinearOpMode {
         double volts = battery.getVoltage();
         boolean warnedBattery = false;
         int loops = 0;
-        boolean holdOn = imu != null;
+        boolean holdOn = gyro.available();
         boolean backWasDown = false;
         double heading = 0;
         Double holdTarget = null;
@@ -99,7 +87,7 @@ public class MecanumDrive extends LinearOpMode {
 
             // BACK: heading hold on/off
             boolean backDown = gamepad1.back;
-            if (backDown && !backWasDown && imu != null) {
+            if (backDown && !backWasDown && gyro.available()) {
                 holdOn = !holdOn;
                 holdTarget = null;
                 gamepad1.rumble(holdOn ? 100 : 300);
@@ -124,7 +112,8 @@ public class MecanumDrive extends LinearOpMode {
             }
 
             // Heading hold: while you're driving but not spinning, steer back to the way the robot was pointing
-            if (imu != null) heading = imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.DEGREES);
+            gyro.update();
+            heading = gyro.heading();
             boolean driving = forward != 0 || strafe != 0;
             if (turn != 0 || !holdOn) {
                 sinceSpin.reset();
@@ -177,10 +166,15 @@ public class MecanumDrive extends LinearOpMode {
             telemetry.addLine(String.format("Battery: <font color='%s'><b>%.2f V</b></font>%s    Time: %s",
                     volts < LOW_BATTERY ? "#ff5252" : "#69f0ae", volts,
                     volts < LOW_BATTERY ? "  LOW, swap soon" : "", clock(matchTimer.seconds())));
-            telemetry.addLine(imu == null ? "Heading hold: <font color='#ffb74d'>no gyro</font>"
+            telemetry.addLine(!gyro.available() ? "Heading hold: <font color='#ffb74d'>no gyro</font>"
                     : String.format("Heading hold: %s   Facing %.0f°%s",
                         holdOn ? "<font color='#69f0ae'><b>ON</b></font>" : "<font color='#9e9e9e'>off</font>",
                         heading, holdCorrection != 0 ? String.format("   correcting %+.0f°", wrap(heading - holdTarget)) : ""));
+            if (gyro.hasPosition()) {
+                String st = gyro.status();
+                telemetry.addLine(String.format("Pinpoint: x %.1f in  y %.1f in  %s", gyro.xInches(), gyro.yInches(),
+                        st.equals("READY") ? "" : "<font color='#ffb74d'>" + st + "</font>"));
+            }
             telemetry.addLine("<b>Wheels</b> (power, amps)");
             telemetry.addLine(String.format("<tt>FL %s %4.1fA    FR %s %4.1fA</tt>", wheel(applied[0]), amps[0], wheel(applied[1]), amps[1]));
             telemetry.addLine(String.format("<tt>BL %s %4.1fA    BR %s %4.1fA</tt>", wheel(applied[2]), amps[2], wheel(applied[3]), amps[3]));
