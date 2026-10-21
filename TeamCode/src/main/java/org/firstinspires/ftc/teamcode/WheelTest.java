@@ -13,6 +13,7 @@ import org.firstinspires.ftc.robotcore.external.Telemetry;
  * Press B: that wheel spins backward? Flip it. Saved on the robot right away, and
  *          Mecanum Drive uses it next time you press INIT. No code change needed.
  * Hold Y: all four wheels slowly forward, to double-check.
+ * Pinpoint check (if "pinpoint" is configured): push the robot by hand and watch the pod counts.
  */
 @TeleOp(name = "Wheel Test", group = "BioBuzz")
 public class WheelTest extends LinearOpMode {
@@ -22,6 +23,7 @@ public class WheelTest extends LinearOpMode {
     @Override
     public void runOpMode() {
         DriveWheels wheels = new DriveWheels(hardwareMap);
+        HeadingSensor gyro = new HeadingSensor(hardwareMap);
         telemetry.setDisplayFormat(Telemetry.DisplayFormat.HTML);
 
         int selected = 0;
@@ -74,6 +76,19 @@ public class WheelTest extends LinearOpMode {
             telemetry.addLine("A <i>different</i> wheel spins? Its cable is in the wrong port: swap cables.");
             telemetry.addLine("<small>D-pad up/down: pick wheel · Y: all four forward</small>");
             if (!message.isEmpty()) telemetry.addLine("<font color='#69f0ae'>" + message + "</font>");
+            telemetry.addLine("");
+            if (gyro.hasPosition()) {
+                gyro.update();
+                String st = gyro.status();
+                telemetry.addLine("<b>Pinpoint</b>  " + (st.equals("READY") ? "<font color='#69f0ae'>READY</font>"
+                        : "<font color='#ffb74d'>" + st + "</font>"));
+                telemetry.addLine(String.format("<tt>X pod %7d   Y pod %7d   Facing %.0f°</tt>",
+                        gyro.xPodTicks(), gyro.yPodTicks(), gyro.heading()));
+                telemetry.addLine("<small>Push robot FORWARD by hand: X pod should count UP.<br>"
+                        + "Slide it LEFT: Y pod should count UP. Wrong pod moves? Swap the X and Y plugs.</small>");
+            } else {
+                telemetry.addLine("<small><font color='#9e9e9e'>No \"pinpoint\" in the configuration (Pinpoint check off).</font></small>");
+            }
             telemetry.update();
         }
         wheels.stop();

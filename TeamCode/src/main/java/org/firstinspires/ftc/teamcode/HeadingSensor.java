@@ -78,6 +78,15 @@ public class HeadingSensor {
         return pinpoint == null ? 0 : pinpoint.getPosY(DistanceUnit.INCH);
     }
 
+    /** Raw pod counts, for checking the pod cables (0 when there's no Pinpoint). */
+    public int xPodTicks() {
+        return pinpoint == null ? 0 : pinpoint.getEncoderX();
+    }
+
+    public int yPodTicks() {
+        return pinpoint == null ? 0 : pinpoint.getEncoderY();
+    }
+
     public String sourceName() {
         return pinpoint != null ? "Pinpoint" : imu != null ? "hub gyro" : "none";
     }
