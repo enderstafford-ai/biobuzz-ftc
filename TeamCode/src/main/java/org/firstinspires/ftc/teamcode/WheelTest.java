@@ -79,9 +79,9 @@ public class WheelTest extends LinearOpMode {
             telemetry.addLine("");
             if (gyro.hasPosition()) {
                 gyro.update();
-                String st = gyro.status();
-                telemetry.addLine("<b>Pinpoint</b>  " + (st.equals("READY") ? "<font color='#69f0ae'>READY</font>"
-                        : "<font color='#ffb74d'>" + st + "</font>"));
+                String problem = gyro.problem();
+                telemetry.addLine("<b>Pinpoint</b>  " + (problem.isEmpty() ? "<font color='#69f0ae'>READY</font>"
+                        : "<font color='#ffb74d'>" + problem + "</font>"));
                 telemetry.addLine(String.format("<tt>X pod %7d   Y pod %7d   Facing %.0f°</tt>",
                         gyro.xPodTicks(), gyro.yPodTicks(), gyro.heading()));
                 telemetry.addLine("<small>Push robot FORWARD by hand: X pod should count UP.<br>"

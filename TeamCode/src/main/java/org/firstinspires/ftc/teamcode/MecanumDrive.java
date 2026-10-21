@@ -171,9 +171,10 @@ public class MecanumDrive extends LinearOpMode {
                         holdOn ? "<font color='#69f0ae'><b>ON</b></font>" : "<font color='#9e9e9e'>off</font>",
                         heading, holdCorrection != 0 ? String.format("   correcting %+.0f°", wrap(heading - holdTarget)) : ""));
             if (gyro.hasPosition()) {
-                String st = gyro.status();
-                telemetry.addLine(String.format("Pinpoint: x %.1f in  y %.1f in  %s", gyro.xInches(), gyro.yInches(),
-                        st.equals("READY") ? "" : "<font color='#ffb74d'>" + st + "</font>"));
+                String problem = gyro.problem();
+                telemetry.addLine(problem.isEmpty()
+                        ? String.format("Pinpoint: x %.1f in  y %.1f in", gyro.xInches(), gyro.yInches())
+                        : "Pinpoint: <font color='#ffb74d'>" + problem + "</font> (using " + gyro.sourceName() + ")");
             }
             telemetry.addLine("<b>Wheels</b> (power, amps)");
             telemetry.addLine(String.format("<tt>FL %s %4.1fA    FR %s %4.1fA</tt>", wheel(applied[0]), amps[0], wheel(applied[1]), amps[1]));

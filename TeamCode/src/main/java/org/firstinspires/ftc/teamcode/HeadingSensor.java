@@ -22,6 +22,7 @@ public class HeadingSensor {
     private GoBildaPinpointDriver pinpoint;
     private IMU imu;
     private double heading;
+    private boolean pinpointOk;   // false while the Pinpoint isn't sending good data
 
     public HeadingSensor(HardwareMap hardwareMap) {
         try {
@@ -31,10 +32,10 @@ public class HeadingSensor {
                                           GoBildaPinpointDriver.EncoderDirection.FORWARD);
             pinpoint.setOffsets(0, 0, DistanceUnit.MM);  // pod positions not measured yet; fine for heading
             pinpoint.resetPosAndIMU();                   // robot must sit still for a moment at INIT
-            return;
         } catch (RuntimeException e) {
             pinpoint = null;
         }
+        // Set up the hub gyro too, so heading hold keeps working if the Pinpoint isn't answering
         try {
             imu = hardwareMap.get(IMU.class, "imu");
             // The Control Hub lies flat, logo up
@@ -59,6 +60,9 @@ public class HeadingSensor {
     public void update() {
         if (pinpoint != null) {
             pinpoint.update();
+            pinpointOk = pinpoint.getDeviceStatus() != GoBildaPinpointDriver.DeviceStatus.FAULT_BAD_READ;
+        }
+        if (pinpoint != null && (pinpointOk || imu == null)) {
             heading = pinpoint.getHeading(AngleUnit.DEGREES);
         } else if (imu != null) {
             heading = imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.DEGREES);
@@ -88,11 +92,21 @@ public class HeadingSensor {
     }
 
     public String sourceName() {
-        return pinpoint != null ? "Pinpoint" : imu != null ? "hub gyro" : "none";
+        return pinpoint != null && (pinpointOk || imu == null) ? "Pinpoint" : imu != null ? "hub gyro" : "none";
     }
 
-    /** "READY", or what's wrong (for example a pod cable not plugged in). Empty when there's no Pinpoint. */
-    public String status() {
-        return pinpoint == null ? "" : pinpoint.getDeviceStatus().toString();
+    /** What's wrong with the Pinpoint in plain words, or "" when it's fine (or not configured). */
+    public String problem() {
+        if (pinpoint == null) return "";
+        switch (pinpoint.getDeviceStatus()) {
+            case READY:                     return "";
+            case CALIBRATING:               return "starting up, keep the robot still";
+            case FAULT_BAD_READ:            return "not answering: check the I2C cable, and that the config's I2C bus number matches the port it's plugged into";
+            case FAULT_NO_PODS_DETECTED:    return "no pods plugged into X or Y";
+            case FAULT_X_POD_NOT_DETECTED:  return "nothing plugged into X";
+            case FAULT_Y_POD_NOT_DETECTED:  return "nothing plugged into Y";
+            case FAULT_IMU_RUNAWAY:         return "gyro error: restart the robot with it sitting still";
+            default:                        return "not ready";
+        }
     }
 }
