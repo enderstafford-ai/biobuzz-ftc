@@ -18,6 +18,8 @@ import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
  * X button (blue): cycle speed  Normal -> Fast -> Slow -> Normal.
  * BACK button: heading hold on/off. While on, the gyro (Pinpoint, or the Control Hub's) keeps the robot pointing
  *   the same way whenever you aren't using the spin stick, so it drives straight instead of drifting.
+ *   With the Pinpoint it also holds the LINE: push the stick straight sideways (or straight forward) and the
+ *   odometry pods notice any drift off that line and push back, so a slide doesn't turn into a diagonal.
  *
  * Nothing here moves the robot on its own: it only moves while you hold a stick or the D-pad.
  * Wheel directions come from DriveWheels (fix a backward wheel with the Wheel Test op mode).
@@ -37,6 +39,8 @@ public class MecanumDrive extends LinearOpMode {
     private static final double HOLD_KP = 0.03;       // heading hold strength: turn power per degree off course
     private static final double HOLD_MAX = 0.4;       // most turning heading hold may add
     private static final double HOLD_SETTLE = 0.3;    // seconds after you let go of spin before it locks the heading
+    private static final double LINE_KP = 0.06;       // straight-line hold: power per inch drifted off the line
+    private static final double LINE_MAX = 0.3;       // most sideways/forward push straight-line hold may add
 
     @Override
     public void runOpMode() {
@@ -69,6 +73,9 @@ public class MecanumDrive extends LinearOpMode {
         boolean backWasDown = false;
         double heading = 0;
         Double holdTarget = null;
+        double[] lineStart = null;  // where a straight sideways/forward push began (inches), for straight-line hold
+        boolean lineSideways = false;
+        double lineCorrection = 0;
         double holdCorrection = 0;
         ElapsedTime sinceSpin = new ElapsedTime();
         ElapsedTime loopTimer = new ElapsedTime();
@@ -116,7 +123,8 @@ public class MecanumDrive extends LinearOpMode {
             gyro.update();
             heading = gyro.heading();
             boolean driving = forward != 0 || strafe != 0;
-            if (turn != 0 || !holdOn) {
+            boolean spinning = turn != 0;
+            if (spinning || !holdOn) {
                 sinceSpin.reset();
                 holdTarget = null;
             } else if (holdTarget == null && sinceSpin.seconds() > HOLD_SETTLE) {
@@ -125,8 +133,33 @@ public class MecanumDrive extends LinearOpMode {
             holdCorrection = 0;
             if (holdTarget != null && driving) {
                 double error = wrap(heading - holdTarget);   // positive = robot has rotated left
-                holdCorrection = Math.max(-HOLD_MAX, Math.min(HOLD_MAX, HOLD_KP * error / power));
+                holdCorrection = clip(HOLD_KP * error / power, HOLD_MAX);
                 turn = holdCorrection;
+            }
+
+            // Straight-line hold: on a pure sideways (or pure forward) push, the pods measure how far the robot
+            // has wandered off that line and push it back. This is what stops a slide from going diagonal.
+            boolean sidewaysOnly = forward == 0 && strafe != 0;
+            boolean forwardOnly  = strafe == 0 && forward != 0;
+            lineCorrection = 0;
+            if (holdOn && gyro.hasPosition() && !spinning && (sidewaysOnly || forwardOnly)) {
+                if (lineStart == null || lineSideways != sidewaysOnly) {
+                    lineStart = new double[] {gyro.xInches(), gyro.yInches()};
+                    lineSideways = sidewaysOnly;
+                }
+                double dx = gyro.xInches() - lineStart[0], dy = gyro.yInches() - lineStart[1];
+                double h = Math.toRadians(heading);
+                double movedForward = dx * Math.cos(h) + dy * Math.sin(h);   // in the robot's own directions
+                double movedLeft    = -dx * Math.sin(h) + dy * Math.cos(h);
+                if (sidewaysOnly) {
+                    lineCorrection = clip(-LINE_KP * movedForward / power, LINE_MAX);
+                    forward = lineCorrection;
+                } else {
+                    lineCorrection = clip(LINE_KP * movedLeft / power, LINE_MAX);   // drifted left: push right
+                    strafe = lineCorrection;
+                }
+            } else {
+                lineStart = null;
             }
 
             double[] target = {
@@ -170,7 +203,8 @@ public class MecanumDrive extends LinearOpMode {
             telemetry.addLine(!gyro.available() ? "Heading hold: <font color='#ffb74d'>no gyro</font>"
                     : String.format("Heading hold: %s   Facing %.0f°%s",
                         holdOn ? "<font color='#69f0ae'><b>ON</b></font>" : "<font color='#9e9e9e'>off</font>",
-                        heading, holdCorrection != 0 ? String.format("   correcting %+.0f°", wrap(heading - holdTarget)) : ""));
+                        heading, holdCorrection != 0 ? String.format("   correcting %+.0f°", wrap(heading - holdTarget)) : "")
+                        + (lineCorrection != 0 ? String.format("   line %+.2f", lineCorrection) : ""));
             String problem = gyro.problem();
             if (!problem.isEmpty()) {
                 telemetry.addLine("<font color='#ffb74d'>" + problem + "</font>");
@@ -186,6 +220,10 @@ public class MecanumDrive extends LinearOpMode {
             telemetry.update();
         }
         wheels.stop();
+    }
+
+    private static double clip(double v, double limit) {
+        return Math.max(-limit, Math.min(limit, v));
     }
 
     private static double deadzone(double v) {

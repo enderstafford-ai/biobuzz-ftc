@@ -17,3 +17,7 @@ Everything else is the official FTC SDK (v12.0). `upstream` remote = FIRST-Tech-
 - Configuration: Control Hub → I2C Bus 0 → `goBILDA Pinpoint Odometry Computer`, name `pinpoint`.
 - `HeadingSensor` asks the Pinpoint once at INIT and drops it if it doesn't answer. Polling a missing
   I2C device every loop jammed the hub's motor chip (motors dead, battery 0.00 V, "Control Hub not responding").
+- Pod settings come from last year's tuned Road Runner code (github.com/Brunana77/19439-DECODE, PinpointDrive.java):
+  4-bar pods, X pod REVERSED, Y pod FORWARD, offsets x −2.625", y −4.625". Their Control Hub IMU orientation:
+  logo LEFT, USB BACKWARD. A copy sits next to this repo in `last-year-19439-DECODE/`.
+- Straight-line hold (Mecanum Drive): on a pure sideways or pure forward push, pod drift off the line is pushed back.

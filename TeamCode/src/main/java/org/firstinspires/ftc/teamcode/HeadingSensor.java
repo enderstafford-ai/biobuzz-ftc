@@ -42,10 +42,12 @@ public class HeadingSensor {
                 pinpoint = null;
                 problem = "Pinpoint not answering: check its I2C cable goes to I2C port 0 on the Control Hub";
             } else {
-                pinpoint.setEncoderResolution(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_SWINGARM_POD);
-                pinpoint.setEncoderDirections(GoBildaPinpointDriver.EncoderDirection.FORWARD,
+                // Pod type, directions and positions from last year's tuned code (team 19439, same drivetrain):
+                // X pod 2.625" right of center, Y pod 4.625" behind center
+                pinpoint.setEncoderResolution(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD);
+                pinpoint.setEncoderDirections(GoBildaPinpointDriver.EncoderDirection.REVERSED,
                                               GoBildaPinpointDriver.EncoderDirection.FORWARD);
-                pinpoint.setOffsets(0, 0, DistanceUnit.MM);  // pod positions not measured yet; fine for heading
+                pinpoint.setOffsets(-2.625, -4.625, DistanceUnit.INCH);
                 pinpoint.resetPosAndIMU();                   // robot must sit still for a moment at INIT
                 return;
             }
@@ -55,10 +57,10 @@ public class HeadingSensor {
         }
         try {
             imu = hardwareMap.get(IMU.class, "imu");
-            // The Control Hub lies flat, logo up
+            // The Control Hub stands on its side: logo facing left, USB ports facing the back (from last year's code)
             boolean ok = imu.initialize(new IMU.Parameters(new RevHubOrientationOnRobot(
-                    RevHubOrientationOnRobot.LogoFacingDirection.UP,
-                    RevHubOrientationOnRobot.UsbFacingDirection.FORWARD)));
+                    RevHubOrientationOnRobot.LogoFacingDirection.LEFT,
+                    RevHubOrientationOnRobot.UsbFacingDirection.BACKWARD)));
             if (ok) {
                 imu.resetYaw();
             } else {
