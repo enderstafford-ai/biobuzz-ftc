@@ -50,8 +50,9 @@ public class MecanumDrive extends LinearOpMode {
 
         telemetry.setDisplayFormat(Telemetry.DisplayFormat.HTML);
         telemetry.addLine("<big><b>BioBuzz Mecanum Drive</b></big>");
+        if (!gyro.problem().isEmpty()) telemetry.addLine("<font color='#ffb74d'>" + gyro.problem() + "</font>");
         telemetry.addLine(gyro.available() ? "Gyro: " + gyro.sourceName() + ". Keep the robot still until you press ▶."
-                : "<font color='#ffb74d'>No \"pinpoint\" or \"imu\" in the configuration, so heading hold is off.</font>");
+                : "<font color='#ffb74d'>No working gyro, so heading hold is off.</font>");
         telemetry.addLine("Ready. Press ▶ to drive.");
         telemetry.addLine(controlsHelp());
         telemetry.update();
@@ -170,11 +171,11 @@ public class MecanumDrive extends LinearOpMode {
                     : String.format("Heading hold: %s   Facing %.0f°%s",
                         holdOn ? "<font color='#69f0ae'><b>ON</b></font>" : "<font color='#9e9e9e'>off</font>",
                         heading, holdCorrection != 0 ? String.format("   correcting %+.0f°", wrap(heading - holdTarget)) : ""));
-            if (gyro.hasPosition()) {
-                String problem = gyro.problem();
-                telemetry.addLine(problem.isEmpty()
-                        ? String.format("Pinpoint: x %.1f in  y %.1f in", gyro.xInches(), gyro.yInches())
-                        : "Pinpoint: <font color='#ffb74d'>" + problem + "</font> (using " + gyro.sourceName() + ")");
+            String problem = gyro.problem();
+            if (!problem.isEmpty()) {
+                telemetry.addLine("<font color='#ffb74d'>" + problem + "</font>");
+            } else if (gyro.hasPosition()) {
+                telemetry.addLine(String.format("Pinpoint: x %.1f in  y %.1f in", gyro.xInches(), gyro.yInches()));
             }
             telemetry.addLine("<b>Wheels</b> (power, amps)");
             telemetry.addLine(String.format("<tt>FL %s %4.1fA    FR %s %4.1fA</tt>", wheel(applied[0]), amps[0], wheel(applied[1]), amps[1]));

@@ -77,16 +77,18 @@ public class WheelTest extends LinearOpMode {
             telemetry.addLine("<small>D-pad up/down: pick wheel · Y: all four forward</small>");
             if (!message.isEmpty()) telemetry.addLine("<font color='#69f0ae'>" + message + "</font>");
             telemetry.addLine("");
-            if (gyro.hasPosition()) {
-                gyro.update();
-                String problem = gyro.problem();
+            gyro.update();
+            String problem = gyro.problem();
+            if (gyro.hasPosition() || !problem.isEmpty()) {
                 telemetry.addLine("<b>Pinpoint</b>  " + (problem.isEmpty() ? "<font color='#69f0ae'>READY</font>"
                         : "<font color='#ffb74d'>" + problem + "</font>"));
+            }
+            if (gyro.hasPosition()) {
                 telemetry.addLine(String.format("<tt>X pod %7d   Y pod %7d   Facing %.0f°</tt>",
                         gyro.xPodTicks(), gyro.yPodTicks(), gyro.heading()));
                 telemetry.addLine("<small>Push robot FORWARD by hand: X pod should count UP.<br>"
                         + "Slide it LEFT: Y pod should count UP. Wrong pod moves? Swap the X and Y plugs.</small>");
-            } else {
+            } else if (problem.isEmpty()) {
                 telemetry.addLine("<small><font color='#9e9e9e'>No \"pinpoint\" in the configuration (Pinpoint check off).</font></small>");
             }
             telemetry.update();
