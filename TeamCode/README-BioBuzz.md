@@ -25,3 +25,7 @@ Everything else is the official FTC SDK (v12.0). `upstream` remote = FIRST-Tech-
   gyro/pod directions from the driver's own spins and straight pushes (saved in /sdcard/FIRST/biobuzz_checks.txt);
   heading hold and line hold stay off until their sensor is proven. `Simple Drive (last year's math)` = their exact
   drive math, full power, no sensors: the A/B test for "code or hardware?".
+- 10/25: Wheel Test is now a 5-step drivetrain check (RB/LB between steps): 1 which wheel is which (box),
+  2 roller X-pattern picture, 3 push-by-hand sensor check (saves gyro/pod directions into SelfCheck, detects
+  swapped X/Y pod cables), 4 hold-to-move floor test (forward / slide / spin, measured by pods + gyro, motor-amps
+  check for slipping belts), 5 results page to photograph.

@@ -59,6 +59,14 @@ public class SelfCheck {
         }
     }
 
+    /** Results from Wheel Test's push-by-hand step (0 = not measured, keeps the old value). */
+    public void setMeasured(int gyro, int xPod, int yPod) {
+        if (gyro != 0) gyroSign = gyro;
+        if (xPod != 0) xPodSign = xPod;
+        if (yPod != 0) yPodSign = yPod;
+        save();
+    }
+
     private void load() {
         if (!SAVE_FILE.exists()) return;
         try {

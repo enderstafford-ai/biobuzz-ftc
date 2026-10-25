@@ -57,6 +57,13 @@ public class DriveWheels {
         save();
     }
 
+    /** Free-wheeling (true) lets you push the robot by hand; braking (false) stops it fast when sticks let go. */
+    public void setFreeWheel(boolean free) {
+        for (DcMotorEx m : motors) {
+            m.setZeroPowerBehavior(free ? DcMotor.ZeroPowerBehavior.FLOAT : DcMotor.ZeroPowerBehavior.BRAKE);
+        }
+    }
+
     public void setPowers(double fl, double fr, double bl, double br) {
         motors[FL].setPower(fl);
         motors[FR].setPower(fr);
