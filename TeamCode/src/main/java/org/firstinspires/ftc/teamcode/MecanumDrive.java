@@ -15,11 +15,13 @@ import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
  * Left stick:  drive forward/back and slide left/right.
  * Right stick (side to side): spin in place.
  * D-pad: slow nudge while held, for lining up (only when the sticks are let go).
- * X button (blue): cycle speed  Normal -> Fast -> Slow -> Normal.
+ * X button (blue): cycle speed  Full -> Medium -> Slow -> Full. Starts at Full, like last year's code.
  * BACK button: heading hold on/off. While on, the gyro (Pinpoint, or the Control Hub's) keeps the robot pointing
  *   the same way whenever you aren't using the spin stick, so it drives straight instead of drifting.
  *   With the Pinpoint it also holds the LINE: push the stick straight sideways (or straight forward) and the
  *   odometry pods notice any drift off that line and push back, so a slide doesn't turn into a diagonal.
+ *   Each correction only switches on after SelfCheck has watched that sensor count the right way, so a gyro
+ *   or pod that counts backward can never make the robot fight you.
  *
  * Nothing here moves the robot on its own: it only moves while you hold a stick or the D-pad.
  * Wheel directions come from DriveWheels (fix a backward wheel with the Wheel Test op mode).
@@ -28,12 +30,12 @@ import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
 public class MecanumDrive extends LinearOpMode {
 
     // Speed modes: name and how much of full power the sticks give
-    private static final String[] MODE_NAMES = {"Normal", "Fast", "Slow"};
-    private static final double[] MODE_POWER = {0.65, 1.0, 0.35};
+    private static final String[] MODE_NAMES = {"Full", "Medium", "Slow"};
+    private static final double[] MODE_POWER = {1.0, 0.6, 0.35};
 
     private static final double DEADZONE = 0.06;      // ignore tiny stick wobble so "straight up" is really straight
     private static final double NUDGE_POWER = 0.25;   // D-pad nudge speed
-    private static final double RAMP_PER_SEC = 4.0;   // speeding up takes 1/4 s from stop to full (stopping is instant)
+    private static final double RAMP_PER_SEC = 8.0;   // speeding up takes 1/8 s from stop to full (stopping is instant)
     private static final double LOW_BATTERY = 11.8;
     private static final double SNAP = 0.2;           // nearly-straight stick pushes count as perfectly straight
     private static final double HOLD_KP = 0.03;       // heading hold strength: turn power per degree off course
@@ -41,6 +43,7 @@ public class MecanumDrive extends LinearOpMode {
     private static final double HOLD_SETTLE = 0.3;    // seconds after you let go of spin before it locks the heading
     private static final double LINE_KP = 0.06;       // straight-line hold: power per inch drifted off the line
     private static final double LINE_MAX = 0.3;       // most sideways/forward push straight-line hold may add
+    private static final double POD_TICKS_PER_INCH = 505.3;  // goBILDA 4-bar pod: 19.894 ticks per mm
 
     @Override
     public void runOpMode() {
@@ -51,6 +54,7 @@ public class MecanumDrive extends LinearOpMode {
         }
 
         HeadingSensor gyro = new HeadingSensor(hardwareMap);
+        SelfCheck check = new SelfCheck();
 
         telemetry.setDisplayFormat(Telemetry.DisplayFormat.HTML);
         telemetry.addLine("<big><b>BioBuzz Mecanum Drive</b></big>");
@@ -62,7 +66,7 @@ public class MecanumDrive extends LinearOpMode {
         telemetry.update();
         waitForStart();
 
-        int mode = 0;               // start in Normal
+        int mode = 0;               // start at Full
         boolean xWasDown = false;
         double[] applied = new double[4];
         double[] amps = new double[4];
@@ -73,7 +77,9 @@ public class MecanumDrive extends LinearOpMode {
         boolean backWasDown = false;
         double heading = 0;
         Double holdTarget = null;
-        double[] lineStart = null;  // where a straight sideways/forward push began (inches), for straight-line hold
+        int[] lineStart = null;     // pod counts where a straight sideways/forward push began, for straight-line hold
+        double lastHeading = 0;
+        int lastXTicks = 0, lastYTicks = 0;
         boolean lineSideways = false;
         double lineCorrection = 0;
         double holdCorrection = 0;
@@ -119,12 +125,25 @@ public class MecanumDrive extends LinearOpMode {
                 power   = NUDGE_POWER;
             }
 
-            // Heading hold: while you're driving but not spinning, steer back to the way the robot was pointing
             gyro.update();
             heading = gyro.heading();
+            int xTicks = gyro.xPodTicks(), yTicks = gyro.yPodTicks();
             boolean driving = forward != 0 || strafe != 0;
             boolean spinning = turn != 0;
-            if (spinning || !holdOn) {
+            boolean sidewaysOnly = !spinning && forward == 0 && strafe != 0;
+            boolean forwardOnly  = !spinning && strafe == 0 && forward != 0;
+
+            // Watch the sensors against what the driver is asking for (see SelfCheck)
+            if (gyro.available() && spinning && !driving) check.spun(turn, wrap(heading - lastHeading));
+            if (gyro.hasPosition() && forwardOnly) check.droveForward(forward, xTicks - lastXTicks);
+            if (gyro.hasPosition() && sidewaysOnly) check.droveSideways(strafe, yTicks - lastYTicks);
+            lastHeading = heading;
+            lastXTicks = xTicks;
+            lastYTicks = yTicks;
+
+            // Heading hold: while you're driving but not spinning, steer back to the way the robot was pointing
+            boolean holdReady = holdOn && check.gyroSign != 0;
+            if (spinning || !holdReady) {
                 sinceSpin.reset();
                 holdTarget = null;
             } else if (holdTarget == null && sinceSpin.seconds() > HOLD_SETTLE) {
@@ -132,30 +151,28 @@ public class MecanumDrive extends LinearOpMode {
             }
             holdCorrection = 0;
             if (holdTarget != null && driving) {
-                double error = wrap(heading - holdTarget);   // positive = robot has rotated left
-                holdCorrection = clip(HOLD_KP * error / power, HOLD_MAX);
+                double error = check.gyroSign * wrap(heading - holdTarget);   // positive = robot has rotated left
+                holdCorrection = clip(HOLD_KP * error / power, HOLD_MAX);    // positive turn = clockwise
                 turn = holdCorrection;
             }
 
             // Straight-line hold: on a pure sideways (or pure forward) push, the pods measure how far the robot
             // has wandered off that line and push it back. This is what stops a slide from going diagonal.
-            boolean sidewaysOnly = forward == 0 && strafe != 0;
-            boolean forwardOnly  = strafe == 0 && forward != 0;
             lineCorrection = 0;
-            if (holdOn && gyro.hasPosition() && !spinning && (sidewaysOnly || forwardOnly)) {
+            boolean lineReady = holdOn && gyro.hasPosition()
+                    && ((sidewaysOnly && check.xPodSign != 0) || (forwardOnly && check.yPodSign != 0));
+            if (lineReady) {
                 if (lineStart == null || lineSideways != sidewaysOnly) {
-                    lineStart = new double[] {gyro.xInches(), gyro.yInches()};
+                    lineStart = new int[] {xTicks, yTicks};
                     lineSideways = sidewaysOnly;
                 }
-                double dx = gyro.xInches() - lineStart[0], dy = gyro.yInches() - lineStart[1];
-                double h = Math.toRadians(heading);
-                double movedForward = dx * Math.cos(h) + dy * Math.sin(h);   // in the robot's own directions
-                double movedLeft    = -dx * Math.sin(h) + dy * Math.cos(h);
                 if (sidewaysOnly) {
+                    double movedForward = check.xPodSign * (xTicks - lineStart[0]) / POD_TICKS_PER_INCH;
                     lineCorrection = clip(-LINE_KP * movedForward / power, LINE_MAX);
                     forward = lineCorrection;
                 } else {
-                    lineCorrection = clip(LINE_KP * movedLeft / power, LINE_MAX);   // drifted left: push right
+                    double movedRight = check.yPodSign * (yTicks - lineStart[1]) / POD_TICKS_PER_INCH;
+                    lineCorrection = clip(-LINE_KP * movedRight / power, LINE_MAX);
                     strafe = lineCorrection;
                 }
             } else {
@@ -202,14 +219,20 @@ public class MecanumDrive extends LinearOpMode {
                     volts < LOW_BATTERY ? "  LOW, swap soon" : "", clock(matchTimer.seconds())));
             telemetry.addLine(!gyro.available() ? "Heading hold: <font color='#ffb74d'>no gyro</font>"
                     : String.format("Heading hold: %s   Facing %.0f°%s",
-                        holdOn ? "<font color='#69f0ae'><b>ON</b></font>" : "<font color='#9e9e9e'>off</font>",
+                        !holdOn ? "<font color='#9e9e9e'>off</font>"
+                        : check.gyroSign == 0 ? "<font color='#ffb74d'>spin once with the right stick to check the gyro</font>"
+                        : "<font color='#69f0ae'><b>ON</b></font>",
                         heading, holdCorrection != 0 ? String.format("   correcting %+.0f°", wrap(heading - holdTarget)) : "")
                         + (lineCorrection != 0 ? String.format("   line %+.2f", lineCorrection) : ""));
             String problem = gyro.problem();
             if (!problem.isEmpty()) {
                 telemetry.addLine("<font color='#ffb74d'>" + problem + "</font>");
             } else if (gyro.hasPosition()) {
-                telemetry.addLine(String.format("Pinpoint: x %.1f in  y %.1f in", gyro.xInches(), gyro.yInches()));
+                telemetry.addLine(String.format("Pinpoint: x %.1f in  y %.1f in   Line hold: %s", gyro.xInches(), gyro.yInches(),
+                        check.xPodSign != 0 && check.yPodSign != 0 ? "ready"
+                        : "drive straight " + (check.yPodSign == 0 ? "sideways" : "")
+                          + (check.xPodSign == 0 && check.yPodSign == 0 ? " and " : "")
+                          + (check.xPodSign == 0 ? "forward" : "") + " a few feet to check the pods"));
             }
             telemetry.addLine("<b>Wheels</b> (power, amps)");
             telemetry.addLine(String.format("<tt>FL %s %4.1fA    FR %s %4.1fA</tt>", wheel(applied[0]), amps[0], wheel(applied[1]), amps[1]));

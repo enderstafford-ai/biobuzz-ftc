@@ -21,3 +21,7 @@ Everything else is the official FTC SDK (v12.0). `upstream` remote = FIRST-Tech-
   4-bar pods, X pod REVERSED, Y pod FORWARD, offsets x −2.625", y −4.625". Their Control Hub IMU orientation:
   logo LEFT, USB BACKWARD. A copy sits next to this repo in `last-year-19439-DECODE/`.
 - Straight-line hold (Mecanum Drive): on a pure sideways or pure forward push, pod drift off the line is pushed back.
+- 10/24: Mecanum Drive starts at FULL power (last year's code had no speed cap; ours was 65%). `SelfCheck` learns
+  gyro/pod directions from the driver's own spins and straight pushes (saved in /sdcard/FIRST/biobuzz_checks.txt);
+  heading hold and line hold stay off until their sensor is proven. `Simple Drive (last year's math)` = their exact
+  drive math, full power, no sensors: the A/B test for "code or hardware?".
