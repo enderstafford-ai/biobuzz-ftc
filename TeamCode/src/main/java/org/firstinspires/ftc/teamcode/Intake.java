@@ -34,6 +34,7 @@ public class Intake {
 
     private final List<DcMotorSimple> motors = new ArrayList<>();
     public final List<String> names = new ArrayList<>();
+    private String problem = "";
     private boolean swapped;
     private boolean yWasDown;
     private double power;
@@ -46,9 +47,22 @@ public class Intake {
             if (m instanceof CRServo) continue;
             String name = hardwareMap.getNamesOf(m).isEmpty() ? "?" : hardwareMap.getNamesOf(m).iterator().next();
             if (drive.contains(name)) continue;
-            if (m instanceof DcMotor) {
-                ((DcMotor) m).setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-                ((DcMotor) m).setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+            // The intake sits on the Expansion Hub. If that hub isn't plugged in or powered, every command to it
+            // hangs until it times out, which would slow the whole robot down, so test it once and skip it if so.
+            long started = System.nanoTime();
+            try {
+                if (m instanceof DcMotor) {
+                    ((DcMotor) m).setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+                    ((DcMotor) m).setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+                }
+                m.setPower(0);
+            } catch (RuntimeException e) {
+                problem = "Intake motor \"" + name + "\" not answering: is the Expansion Hub plugged in and powered?";
+                continue;
+            }
+            if (System.nanoTime() - started > 150_000_000L) {
+                problem = "Intake motor \"" + name + "\" answered very slowly: is the Expansion Hub plugged in and powered?";
+                continue;
             }
             motors.add(m);
             names.add(name);
@@ -77,7 +91,9 @@ public class Intake {
         boolean in = gamepad.left_trigger > TRIGGER;
         boolean out = gamepad.left_bumper;
         double p = in == out ? 0 : in ? POWER : -POWER;
-        power = swapped ? -p : p;
+        if (swapped) p = -p;
+        if (p == power) return;   // only talk to the hub when something changes
+        power = p;
         for (DcMotorSimple m : motors) m.setPower(power);
     }
 
@@ -89,7 +105,7 @@ public class Intake {
     /** One line for the screen: what it's doing and how hard the motor is working. */
     public String status() {
         if (!available()) {
-            return "<font color='#ffb74d'>Intake: no intake motor in the robot configuration</font>";
+            return "<font color='#ffb74d'>Intake: " + (problem.isEmpty() ? "no intake motor in the robot configuration" : problem) + "</font>";
         }
         double sign = swapped ? -power : power;
         String doing = sign > 0 ? "<font color='#69f0ae'><b>IN</b></font>"
@@ -102,7 +118,7 @@ public class Intake {
     }
 
     public String buttonsHelp() {
-        if (!available()) return "No intake motor found. Add the intake motor to the robot configuration.";
+        if (!available()) return problem.isEmpty() ? "No intake motor found. Add the intake motor to the robot configuration." : problem;
         return "Intake (" + String.join(", ", names) + "): hold LT = in, LB = out."
              + (swapped ? " [swapped]" : "") + " Backward? Press Y now to swap.";
     }
