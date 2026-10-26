@@ -309,6 +309,9 @@ public class WheelTest extends LinearOpMode {
         if (!ampResult.isEmpty()) telemetry.addLine("<font color='" + WARN + "'>" + ampResult + "</font>");
     }
 
+    private static final double X_POD_SIDE_OFFSET = 2.625;   // inches from the center of the robot
+    private static final double Y_POD_BACK_OFFSET = 4.625;
+
     private void judge(String test) {
         double[] avg = new double[4];
         for (int i = 0; i < 4; i++) avg[i] = ampSamples == 0 ? 0 : ampSum[i] / ampSamples;
@@ -350,8 +353,14 @@ public class WheelTest extends LinearOpMode {
             else if (rate < 40) spinResult = String.format("!weak turning (%.0f°/s). Check step 1 (front right and "
                     + "back left swapped?) and step 2.", rate);
             else spinResult = String.format("ok: %.0f° per second", rate);
-            if (pods && Math.abs(movedFwd) + Math.abs(movedRight) > 6 && !spinResult.startsWith("!")) {
-                spinResult = "!turns but also slides around (" + Math.round(Math.abs(movedFwd) + Math.abs(movedRight))
+            // The pods aren't at the robot's center, so even a perfect spin in place rolls each pod around a circle
+            // (X pod 2.625 in. to the side, Y pod 4.625 in. behind, from last year's code). Take that part out;
+            // only what's left over is the robot really sliding. (Which way each pod counts doesn't matter here.)
+            double radians = Math.toRadians(Math.abs(turnedCw));
+            double circleFwd = X_POD_SIDE_OFFSET * radians, circleRight = Y_POD_BACK_OFFSET * radians;
+            double slid = Math.abs(Math.abs(movedFwd) - circleFwd) + Math.abs(Math.abs(movedRight) - circleRight);
+            if (pods && slid > Math.max(6, 0.4 * (circleFwd + circleRight)) && !spinResult.startsWith("!")) {
+                spinResult = "!turns but also slides around (" + Math.round(slid)
                         + " in). A wheel is slipping: check step 2 and the belts.";
             }
         }
