@@ -10,7 +10,7 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
  * Use it to compare with Mecanum Drive. If this drives badly too, the problem is in the robot
  * (wheels, belts, motors), not in the code.
  *
- * Left stick: drive and slide. Right stick: spin. LT/LB: intake in/out, Y/A: intake speed (same as Mecanum Drive).
+ * Left stick: drive and slide. Right stick: spin. LT/LB: intake in/out, Y/A: intake speed, RB: brake (same as Mecanum Drive).
  */
 @TeleOp(name = "Simple Drive (last year's math)", group = "BioBuzz")
 public class SimpleDrive extends LinearOpMode {
@@ -19,16 +19,21 @@ public class SimpleDrive extends LinearOpMode {
     public void runOpMode() {
         DriveWheels wheels = new DriveWheels(hardwareMap);
         Intake intake = new Intake(hardwareMap);
+        Brake brake = new Brake(hardwareMap);
         telemetry.addLine("Simple Drive: last year's drive math, full power, no gyro. Press ▶.");
         telemetry.addLine(intake.buttonsHelp());
         telemetry.update();
         while (opModeInInit()) {
-            if (intake.checkSwapButton(gamepad1)) {
-                telemetry.addLine("Intake buttons swapped. " + intake.buttonsHelp());
+            boolean swapped = intake.checkSwapButton(gamepad1);
+            if (swapped || brake.checkAdjustButtons(gamepad1)) {
+                telemetry.addLine(intake.buttonsHelp());
+                telemetry.addLine(brake.help());
                 telemetry.update();
             }
             sleep(20);
         }
+
+        brake.raiseAfterAdjusting();
 
         while (opModeIsActive()) {
             double forward = -gamepad1.left_stick_y;
@@ -41,6 +46,7 @@ public class SimpleDrive extends LinearOpMode {
             double bl = (forward - strafe + turn) / denominator;
             double fr = (forward - strafe - turn) / denominator;
             double br = (forward + strafe - turn) / denominator;
+            if (brake.update(gamepad1)) fl = fr = bl = br = 0;   // brake down: wheels don't fight it
             wheels.setPowers(fl, fr, bl, br);
             intake.update(gamepad1);
 
@@ -51,5 +57,6 @@ public class SimpleDrive extends LinearOpMode {
         }
         wheels.stop();
         intake.stop();
+        brake.raise();
     }
 }

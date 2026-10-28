@@ -17,6 +17,7 @@ import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
  * D-pad: slow nudge while held, for lining up (only when the sticks are let go).
  * X button (blue): cycle speed  Full -> Medium -> Slow -> Full. Starts at Full, like last year's code.
  * LT (hold): intake in.  LB (hold): intake out.  Y / A: intake faster / slower.  Backward? Press B on the INIT screen to swap them (see Intake).
+ * RB (hold): brake down; the wheels stop while it's down (see Brake). D-pad up/down on INIT: how far it goes down.
  * BACK button: heading hold on/off. While on, the gyro (Pinpoint, or the Control Hub's) keeps the robot pointing
  *   the same way whenever you aren't using the spin stick, so it drives straight instead of drifting.
  *   With the Pinpoint it also holds the LINE: push the stick straight sideways (or straight forward) and the
@@ -55,6 +56,7 @@ public class MecanumDrive extends LinearOpMode {
         }
 
         Intake intake = new Intake(hardwareMap);
+        Brake brake = new Brake(hardwareMap);
         HeadingSensor gyro = new HeadingSensor(hardwareMap);
         SelfCheck check = new SelfCheck();
 
@@ -66,17 +68,23 @@ public class MecanumDrive extends LinearOpMode {
         telemetry.addLine("Ready. Press ▶ to drive.");
         telemetry.addLine(controlsHelp());
         telemetry.addLine(intake.buttonsHelp());
+        telemetry.addLine(brake.help());
         telemetry.update();
-        // Wait for ▶, watching B so the intake buttons can be swapped from here
+        // Wait for ▶, watching B (swap intake buttons) and the D-pad (how far the brake goes down)
         while (opModeInInit()) {
-            if (intake.checkSwapButton(gamepad1)) {
-                telemetry.addLine("<big><b>Intake buttons swapped.</b></big>");
+            boolean swapped = intake.checkSwapButton(gamepad1);
+            boolean adjusted = brake.checkAdjustButtons(gamepad1);
+            if (swapped || adjusted) {
+                if (swapped) telemetry.addLine("<big><b>Intake buttons swapped.</b></big>");
+                if (adjusted) telemetry.addLine("<big><b>Brake shown at its new down position.</b></big> It goes back up at ▶.");
                 telemetry.addLine(intake.buttonsHelp());
+                telemetry.addLine(brake.help());
                 telemetry.addLine("Press ▶ to drive.");
                 telemetry.update();
             }
             sleep(20);
         }
+        brake.raiseAfterAdjusting();
 
         int mode = 0;               // start at Full
         boolean xWasDown = false;
@@ -211,6 +219,7 @@ public class MecanumDrive extends LinearOpMode {
                 }
                 applied[i] = want;
             }
+            if (brake.update(gamepad1)) java.util.Arrays.fill(applied, 0);   // brake down: wheels don't fight it
             wheels.setPowers(applied[0], applied[1], applied[2], applied[3]);
             intake.update(gamepad1);
 
@@ -248,6 +257,7 @@ public class MecanumDrive extends LinearOpMode {
                           + (check.xPodSign == 0 ? "forward" : "") + " a few feet to check the pods"));
             }
             telemetry.addLine(intake.status());
+            telemetry.addLine(brake.status());
             telemetry.addLine("<b>Wheels</b> (power, amps)");
             telemetry.addLine(String.format("<tt>FL %s %4.1fA    FR %s %4.1fA</tt>", wheel(applied[0]), amps[0], wheel(applied[1]), amps[1]));
             telemetry.addLine(String.format("<tt>BL %s %4.1fA    BR %s %4.1fA</tt>", wheel(applied[2]), amps[2], wheel(applied[3]), amps[3]));
@@ -258,6 +268,7 @@ public class MecanumDrive extends LinearOpMode {
         }
         wheels.stop();
         intake.stop();
+        brake.raise();
     }
 
     private static double clip(double v, double limit) {
@@ -277,7 +288,7 @@ public class MecanumDrive extends LinearOpMode {
 
     private static String controlsHelp() {
         return "<small><font color='#9e9e9e'>Left stick: drive + slide · Right stick: spin · "
-             + "D-pad: nudge · X: speed · LT/LB: intake · Y/A: intake speed · BACK: heading hold</font></small>";
+             + "D-pad: nudge · X: speed · LT/LB: intake · Y/A: intake speed · RB: brake · BACK: heading hold</font></small>";
     }
 
     private static String modeColor(int mode) {
