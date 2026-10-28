@@ -16,19 +16,22 @@ import java.util.Arrays;
 import java.util.List;
 
 /*
- * The intake wheels: one goBILDA 5203 motor, 1620 RPM.
+ * The intake wheels: one goBILDA 5203 motor, 1620 RPM, through right-angle gears and chains to the wheels.
  *
  * Hold LT: intake pulls in.   Hold LB: intake pushes out.   Neither (or both): stopped.
+ * Y: intake faster.   A: intake slower.   (10% steps, 10% to 100%; the screen shows the speed.)
  *
- * Which way is "in" is saved in a small file on the Control Hub. If LT and LB come out backward,
- * press Y on the INIT screen (before ▶) to swap them. No code change or reinstall needed.
+ * The speed and which way is "in" are saved in a small file on the Control Hub, so the speed you
+ * settle on stays for the next match. If LT and LB come out backward, press B on the INIT screen
+ * (before ▶) to swap them. No code change or reinstall needed.
  *
  * Robot configuration: any motor that isn't one of the four drive wheels counts as the intake,
  * whatever it was named, so it works with "intake" or any other name.
  */
 public class Intake {
 
-    private static final double POWER = 1.0;
+    private static final double MOTOR_RPM = 1620;
+    private static final int STEP = 10;           // percent per Y/A press
     private static final double TRIGGER = 0.3;   // how far LT has to be pulled to count
     private static final File SAVE_FILE = new File("/sdcard/FIRST/biobuzz_intake.txt");
 
@@ -36,7 +39,8 @@ public class Intake {
     public final List<String> names = new ArrayList<>();
     private String problem = "";
     private boolean swapped;
-    private boolean yWasDown;
+    private boolean bWasDown, yWasDown, aWasDown;
+    private int percent = 100;
     private double power;
     private double amps;
     private int statusCalls;
@@ -67,20 +71,20 @@ public class Intake {
             motors.add(m);
             names.add(name);
         }
-        swapped = SAVE_FILE.exists() && ReadWriteFile.readFile(SAVE_FILE).trim().equals("swapped");
+        load();
     }
 
     public boolean available() {
         return !motors.isEmpty();
     }
 
-    /** Call every loop on the INIT screen: Y swaps which button pulls in, and saves it. */
+    /** Call every loop on the INIT screen: B swaps which button pulls in, and saves it. */
     public boolean checkSwapButton(Gamepad gamepad) {
-        boolean pressed = gamepad.y && !yWasDown;
-        yWasDown = gamepad.y;
+        boolean pressed = gamepad.b && !bWasDown;
+        bWasDown = gamepad.b;
         if (pressed) {
             swapped = !swapped;
-            ReadWriteFile.writeFile(SAVE_FILE, swapped ? "swapped" : "normal");
+            save();
             gamepad.rumble(200);
         }
         return pressed;
@@ -88,9 +92,21 @@ public class Intake {
 
     /** Call every loop while driving. */
     public void update(Gamepad gamepad) {
+        // Y / A: change the speed once per press (not every loop while held)
+        boolean faster = gamepad.y && !yWasDown, slower = gamepad.a && !aWasDown;
+        yWasDown = gamepad.y;
+        aWasDown = gamepad.a;
+        if (faster || slower) {
+            int before = percent;
+            percent = Math.max(STEP, Math.min(100, percent + (faster ? STEP : -STEP)));
+            gamepad.rumble(percent == before ? 400 : 80);   // long buzz = already at the top/bottom
+            save();
+        }
+
         boolean in = gamepad.left_trigger > TRIGGER;
         boolean out = gamepad.left_bumper;
-        double p = in == out ? 0 : in ? POWER : -POWER;
+        double speed = percent / 100.0;
+        double p = in == out ? 0 : in ? speed : -speed;
         if (swapped) p = -p;
         if (p == power) return;   // only talk to the hub when something changes
         power = p;
@@ -114,12 +130,42 @@ public class Intake {
             amps = 0;
             for (DcMotorSimple m : motors) if (m instanceof DcMotorEx) amps += ((DcMotorEx) m).getCurrent(CurrentUnit.AMPS);
         }
-        return String.format("Intake: %s  %.1fA   <small>(LT in · LB out)</small>", doing, amps);
+        return String.format("Intake: %s  <b>%d%%</b> %s %.0f motor RPM  %.1fA   <small>(LT in · LB out · Y/A speed)</small>",
+                doing, percent, bar(), MOTOR_RPM * percent / 100, amps);
     }
 
     public String buttonsHelp() {
         if (!available()) return problem.isEmpty() ? "No intake motor found. Add the intake motor to the robot configuration." : problem;
-        return "Intake (" + String.join(", ", names) + "): hold LT = in, LB = out."
-             + (swapped ? " [swapped]" : "") + " Backward? Press Y now to swap.";
+        return "Intake (" + String.join(", ", names) + "): hold LT = in, LB = out, Y/A = faster/slower (now "
+             + percent + "%)." + (swapped ? " [swapped]" : "") + " Backward? Press B now to swap.";
+    }
+
+    /** Plain-text speed for screens without HTML. */
+    public String speedText() {
+        return String.format("Intake speed %d%% (%.0f motor RPM), Y/A to change", percent, MOTOR_RPM * percent / 100);
+    }
+
+    private String bar() {
+        StringBuilder b = new StringBuilder();
+        for (int i = 10; i <= 100; i += 10) b.append(i <= percent ? '█' : '░');
+        return b.toString();
+    }
+
+    private void load() {
+        if (!SAVE_FILE.exists()) return;
+        try {
+            for (String line : ReadWriteFile.readFile(SAVE_FILE).split("\n")) {
+                line = line.trim();
+                if (line.equals("swapped")) swapped = true;                    // older one-word file
+                if (line.startsWith("swapped=")) swapped = line.endsWith("true");
+                if (line.startsWith("speed=")) percent = Math.max(STEP, Math.min(100, Integer.parseInt(line.substring(6))));
+            }
+        } catch (RuntimeException ignored) {
+            // A broken file just means the starting settings
+        }
+    }
+
+    private void save() {
+        ReadWriteFile.writeFile(SAVE_FILE, "swapped=" + swapped + "\nspeed=" + percent + "\n");
     }
 }

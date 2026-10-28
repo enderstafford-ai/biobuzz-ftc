@@ -16,7 +16,7 @@ import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
  * Right stick (side to side): spin in place.
  * D-pad: slow nudge while held, for lining up (only when the sticks are let go).
  * X button (blue): cycle speed  Full -> Medium -> Slow -> Full. Starts at Full, like last year's code.
- * LT (hold): intake in.  LB (hold): intake out.  Backward? Press Y on the INIT screen to swap them (see Intake).
+ * LT (hold): intake in.  LB (hold): intake out.  Y / A: intake faster / slower.  Backward? Press B on the INIT screen to swap them (see Intake).
  * BACK button: heading hold on/off. While on, the gyro (Pinpoint, or the Control Hub's) keeps the robot pointing
  *   the same way whenever you aren't using the spin stick, so it drives straight instead of drifting.
  *   With the Pinpoint it also holds the LINE: push the stick straight sideways (or straight forward) and the
@@ -67,7 +67,7 @@ public class MecanumDrive extends LinearOpMode {
         telemetry.addLine(controlsHelp());
         telemetry.addLine(intake.buttonsHelp());
         telemetry.update();
-        // Wait for ▶, watching Y so the intake buttons can be swapped from here
+        // Wait for ▶, watching B so the intake buttons can be swapped from here
         while (opModeInInit()) {
             if (intake.checkSwapButton(gamepad1)) {
                 telemetry.addLine("<big><b>Intake buttons swapped.</b></big>");
@@ -277,7 +277,7 @@ public class MecanumDrive extends LinearOpMode {
 
     private static String controlsHelp() {
         return "<small><font color='#9e9e9e'>Left stick: drive + slide · Right stick: spin · "
-             + "D-pad: nudge · X: speed · LT/LB: intake · BACK: heading hold</font></small>";
+             + "D-pad: nudge · X: speed · LT/LB: intake · Y/A: intake speed · BACK: heading hold</font></small>";
     }
 
     private static String modeColor(int mode) {
