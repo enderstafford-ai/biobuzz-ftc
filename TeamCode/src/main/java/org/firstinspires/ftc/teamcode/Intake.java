@@ -25,7 +25,7 @@ import java.util.List;
  * settle on stays for the next match. If LT and LB come out backward, press B on the INIT screen
  * (before ▶) to swap them. No code change or reinstall needed.
  *
- * Robot configuration: any motor that isn't one of the four drive wheels counts as the intake,
+ * Robot configuration: any motor that isn't one of the four drive wheels (or "flywheel") counts as the intake,
  * whatever it was named, so it works with "intake" or any other name.
  */
 public class Intake {
@@ -50,7 +50,7 @@ public class Intake {
         for (DcMotorSimple m : hardwareMap.getAll(DcMotorSimple.class)) {
             if (m instanceof CRServo) continue;
             String name = hardwareMap.getNamesOf(m).isEmpty() ? "?" : hardwareMap.getNamesOf(m).iterator().next();
-            if (drive.contains(name)) continue;
+            if (drive.contains(name) || name.equals("flywheel")) continue;   // the flywheel has its own controls
             // The intake sits on the Expansion Hub. If that hub isn't plugged in or powered, every command to it
             // hangs until it times out, which would slow the whole robot down, so test it once and skip it if so.
             long started = System.nanoTime();
@@ -90,10 +90,10 @@ public class Intake {
         return pressed;
     }
 
-    /** Call every loop while driving. */
-    public void update(Gamepad gamepad) {
+    /** Call every loop while driving. speedButtons = false while RT is held (Y/A then belong to the flywheel). */
+    public void update(Gamepad gamepad, boolean speedButtons) {
         // Y / A: change the speed once per press (not every loop while held)
-        boolean faster = gamepad.y && !yWasDown, slower = gamepad.a && !aWasDown;
+        boolean faster = speedButtons && gamepad.y && !yWasDown, slower = speedButtons && gamepad.a && !aWasDown;
         yWasDown = gamepad.y;
         aWasDown = gamepad.a;
         if (faster || slower) {
