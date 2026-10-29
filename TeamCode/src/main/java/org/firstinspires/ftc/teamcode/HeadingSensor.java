@@ -82,6 +82,19 @@ public class HeadingSensor {
 
     /** Call once per loop before reading. */
     public void update() {
+        try {
+            read();
+        } catch (RuntimeException e) {
+            // A cable knocked loose can make a read fail outright: count it like a bad read, never crash the drive
+            if (++badReads >= GIVE_UP_AFTER) {
+                pinpoint = null;
+                imu = null;
+                problem = "Gyro/Pinpoint stopped answering (loose cable?), heading hold off until restart. Driving still works.";
+            }
+        }
+    }
+
+    private void read() {
         if (pinpoint != null) {
             pinpoint.update();
             if (pinpoint.getDeviceStatus() == GoBildaPinpointDriver.DeviceStatus.FAULT_BAD_READ) {

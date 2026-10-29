@@ -96,6 +96,7 @@ public class MecanumDrive extends LinearOpMode {
         boolean xWasDown = false;
         double[] applied = new double[4];
         double[] amps = new double[4];
+        int[] noCurrent = new int[4];   // readings in a row where a wheel was told to go but drew no current
         double volts = battery.getVoltage();
         boolean warnedBattery = false;
         int loops = 0;
@@ -233,7 +234,11 @@ public class MecanumDrive extends LinearOpMode {
             // Battery and motor current change slowly; read them a few times a second
             if (loops++ % 10 == 0) {
                 volts = battery.getVoltage();
-                for (int i = 0; i < 4; i++) amps[i] = wheels.motors[i].getCurrent(CurrentUnit.AMPS);
+                for (int i = 0; i < 4; i++) {
+                    amps[i] = wheels.motors[i].getCurrent(CurrentUnit.AMPS);
+                    if (Math.abs(applied[i]) > 0.3 && amps[i] < 0.05) noCurrent[i]++;
+                    else if (amps[i] > 0.2) noCurrent[i] = 0;
+                }
                 if (volts < LOW_BATTERY && volts > 1 && !warnedBattery) {
                     gamepad1.rumble(600);
                     warnedBattery = true;
@@ -262,6 +267,11 @@ public class MecanumDrive extends LinearOpMode {
                         : "drive straight " + (check.yPodSign == 0 ? "sideways" : "")
                           + (check.xPodSign == 0 && check.yPodSign == 0 ? " and " : "")
                           + (check.xPodSign == 0 ? "forward" : "") + " a few feet to check the pods"));
+            }
+            for (int i = 0; i < 4; i++) {
+                if (noCurrent[i] >= 5) telemetry.addLine(String.format(
+                        "<font color='#ff5252'><b>%s wheel motor gets no power:</b> its cable is probably out of Control Hub motor port %d.</font>",
+                        DriveWheels.LABELS[i], DriveWheels.PORTS[i]));
             }
             telemetry.addLine(intake.status());
             telemetry.addLine(brake.status());

@@ -129,18 +129,28 @@ public abstract class ParkAuto extends LinearOpMode {
         ElapsedTime legTimer = new ElapsedTime();
         ElapsedTime stallTimer = new ElapsedTime();
         ElapsedTime loopTimer = new ElapsedTime();
+        double moved = 0;
+        int ticks = startTicks;
 
         while (opModeIsActive()) {
             double dt = Math.min(loopTimer.seconds(), 0.1);
             loopTimer.reset();
             gyro.update();
-            int ticks = podTicks(slide);
-            double moved = Math.abs(ticks - startTicks) / POD_TICKS_PER_INCH;
+            if (gyro.hasPosition()) {   // keep the last good count if the Pinpoint just dropped out
+                ticks = podTicks(slide);
+                moved = Math.abs(ticks - startTicks) / POD_TICKS_PER_INCH;
+            }
 
             // Pods not counting at all after half a second of driving: they're not working, use time instead
             if (usePods && legTimer.seconds() > 0.5 && moved < 0.5 && tries == 0) {
                 usePods = false;
                 status = "(pods didn't count, went by time)";
+            }
+            // Pinpoint dropped out partway (loose cable): finish the rest of this leg by time
+            if (usePods && !gyro.hasPosition()) {
+                usePods = false;
+                timeLimit = legTimer.seconds() + Math.max(0, inches - moved) / (slide ? SLIDE_IN_PER_SEC : FORWARD_IN_PER_SEC);
+                status = "(Pinpoint dropped out, finished by time)";
             }
             if (usePods ? moved >= inches : legTimer.seconds() >= timeLimit) break;
             if (legTimer.seconds() > timeLimit * 3 + 2) {          // way too long: something's wrong, stop

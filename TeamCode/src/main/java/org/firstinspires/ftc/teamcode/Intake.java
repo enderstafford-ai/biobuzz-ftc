@@ -44,6 +44,7 @@ public class Intake {
     private double power;
     private double amps;
     private int statusCalls;
+    private final Guard guard = new Guard("Intake");
 
     public Intake(HardwareMap hardwareMap) {
         List<String> drive = Arrays.asList(DriveWheels.NAMES);
@@ -106,16 +107,17 @@ public class Intake {
         boolean in = gamepad.left_trigger > TRIGGER;
         boolean out = gamepad.left_bumper;
         double speed = percent / 100.0;
-        double p = in == out ? 0 : in ? speed : -speed;
-        if (swapped) p = -p;
+        double pull = in == out ? 0 : in ? speed : -speed;
+        double p = swapped ? -pull : pull;
+        if (guard.isDown()) power = Double.NaN;   // unknown while the hub isn't answering: resend on the next try
         if (p == power) return;   // only talk to the hub when something changes
-        power = p;
-        for (DcMotorSimple m : motors) m.setPower(power);
+        if (!guard.ready(p != 0)) return;
+        if (guard.run(() -> { for (DcMotorSimple m : motors) m.setPower(p); })) power = p;
     }
 
     public void stop() {
+        if (!guard.isDown()) guard.run(() -> { for (DcMotorSimple m : motors) m.setPower(0); });
         power = 0;
-        for (DcMotorSimple m : motors) m.setPower(0);
     }
 
     /** One line for the screen: what it's doing and how hard the motor is working. */
@@ -123,12 +125,16 @@ public class Intake {
         if (!available()) {
             return "<font color='#ffb74d'>Intake: " + (problem.isEmpty() ? "no intake motor in the robot configuration" : problem) + "</font>";
         }
+        if (guard.isDown()) return "<font color='#ff5252'>" + guard.problem() + "</font>";
         double sign = swapped ? -power : power;
         String doing = sign > 0 ? "<font color='#69f0ae'><b>IN</b></font>"
                      : sign < 0 ? "<font color='#ff8a65'><b>OUT</b></font>" : "off";
         if (statusCalls++ % 10 == 0) {   // current changes slowly; reading it every loop slows the hub down
-            amps = 0;
-            for (DcMotorSimple m : motors) if (m instanceof DcMotorEx) amps += ((DcMotorEx) m).getCurrent(CurrentUnit.AMPS);
+            guard.run(() -> {
+                double total = 0;
+                for (DcMotorSimple m : motors) if (m instanceof DcMotorEx) total += ((DcMotorEx) m).getCurrent(CurrentUnit.AMPS);
+                amps = total;
+            });
         }
         return String.format("Intake: %s  <b>%d%%</b> %s %.0f motor RPM  %.1fA   <small>(LT in · LB out · Y/A speed)</small>",
                 doing, percent, bar(), MOTOR_RPM * percent / 100, amps);

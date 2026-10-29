@@ -40,6 +40,7 @@ public class Flywheel {
     private boolean spinning, buzzed;
     private boolean noEncoder;       // encoder cable missing: run by plain power instead of chasing a speed it can't see
     private long spinStartedNs;
+    private final Guard guard = new Guard("Flywheel");
     private double rpm;
 
     public Flywheel(HardwareMap hardwareMap) {
@@ -72,7 +73,7 @@ public class Flywheel {
         xWas = gamepad.x;
         if (!pressed || motor == null) return false;
         reversed = !reversed;
-        motor.setDirection(reversed ? DcMotorSimple.Direction.REVERSE : DcMotorSimple.Direction.FORWARD);
+        guard.run(() -> motor.setDirection(reversed ? DcMotorSimple.Direction.REVERSE : DcMotorSimple.Direction.FORWARD));
         save();
         gamepad.rumble(200);
         return true;
@@ -86,6 +87,7 @@ public class Flywheel {
     /** Call every loop while driving. */
     public void update(Gamepad gamepad) {
         boolean want = held(gamepad);
+        boolean changed = false;
         if (want) {
             boolean faster = gamepad.y && !yWas, slower = gamepad.a && !aWas;
             if (faster || slower) {
@@ -93,18 +95,28 @@ public class Flywheel {
                 targetRpm = Math.max(MIN_RPM, Math.min(MAX_RPM, targetRpm + (faster ? STEP_RPM : -STEP_RPM)));
                 gamepad.rumble(targetRpm == before ? 400 : 80);
                 save();
-                if (motor != null && spinning) command();
+                changed = true;
                 buzzed = false;
             }
         }
         yWas = gamepad.y;
         aWas = gamepad.a;
-        if (motor == null) return;
+        if (motor == null || !guard.ready(want)) return;
+        boolean speedChanged = changed;
+        if (!guard.run(() -> drive(want, speedChanged))) spinning = false;   // hub not answering: start over next time
+        if (spinning && !buzzed && ready()) {
+            gamepad.rumble(250);   // up to speed: feed with LT
+            buzzed = true;
+        }
+    }
 
+    private void drive(boolean want, boolean speedChanged) {
         if (want && !spinning) {
             command();
             buzzed = false;
             spinStartedNs = System.nanoTime();
+        } else if (want && speedChanged) {
+            command();
         } else if (!want && spinning) {
             motor.setPower(0);
         }
@@ -116,10 +128,6 @@ public class Flywheel {
             noEncoder = true;
             motor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
             command();
-        }
-        if (spinning && !buzzed && ready()) {
-            gamepad.rumble(250);   // up to speed: feed with LT
-            buzzed = true;
         }
     }
 
@@ -134,12 +142,13 @@ public class Flywheel {
     }
 
     public void stop() {
-        if (motor != null) motor.setPower(0);
+        if (motor != null && !guard.isDown()) guard.run(() -> motor.setPower(0));
         spinning = false;
     }
 
     public String status() {
         if (motor == null) return "<font color='#ffb74d'>Flywheel: " + problem + "</font>";
+        if (guard.isDown()) return "<font color='#ff5252'>" + guard.problem() + "</font>";
         if (noEncoder) return String.format("Flywheel: <font color='#ffb74d'>no encoder signal (plug its small cable into Expansion Hub encoder port 1)</font>, running at about %d RPM by power  %s",
                 targetRpm, spinning ? "<b>ON</b>" : "<small>(hold RT)</small>");
         String state = !spinning ? "off  <small>(hold RT)</small>"

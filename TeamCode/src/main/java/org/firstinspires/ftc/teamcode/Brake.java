@@ -29,6 +29,7 @@ public class Brake {
     private boolean isDown;
     private boolean upWas, downWas;
     private boolean showing;
+    private final Guard guard = new Guard("Brake");
 
     public Brake(HardwareMap hardwareMap) {
         load();
@@ -61,32 +62,35 @@ public class Brake {
         if (!more && !less) return false;
         down = Math.max(0, Math.min(1, down + (more ? STEP : -STEP)));
         save();
-        servo.setPosition(down);     // show where "down" is now
+        guard.run(() -> servo.setPosition(down));     // show where "down" is now
         showing = true;
         return true;
     }
 
     /** Before ▶: put the brake back up after showing an adjustment. */
     public void raiseAfterAdjusting() {
-        if (servo != null && showing) servo.setPosition(UP);
+        if (servo != null && showing) guard.run(() -> servo.setPosition(UP));
         showing = false;
     }
 
     /** Call every loop while driving. Returns true while the brake is down (stop the drive wheels). */
     public boolean update(Gamepad gamepad) {
         boolean want = gamepad.right_bumper;
-        if (servo != null && want != isDown) servo.setPosition(want ? down : UP);   // only talk to the hub on a change
-        isDown = want;
+        // Only talk to the hub on a change. Holding RB still stops the wheels even if the servo isn't answering.
+        if (servo != null && want != isDown && guard.ready(true)) {
+            if (guard.run(() -> servo.setPosition(want ? down : UP))) isDown = want;
+        }
         return want && servo != null;
     }
 
     public void raise() {
-        if (servo != null) servo.setPosition(UP);
+        if (servo != null && !guard.isDown()) guard.run(() -> servo.setPosition(UP));
         isDown = false;
     }
 
     public String status() {
         if (servo == null) return "<font color='#ffb74d'>Brake: " + problem + "</font>";
+        if (guard.isDown()) return "<font color='#ff5252'>" + guard.problem() + "</font>";
         return isDown ? "<font color='#ff5252'><b>BRAKE DOWN</b></font> (wheels stopped)" : "Brake: up  <small>(hold RB)</small>";
     }
 
