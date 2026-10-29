@@ -29,6 +29,7 @@ public class Flywheel {
     private static final int START_RPM = 3000;                // ball leaves at about 6.8 m/s (needs ~6 to reach the hive)
     private static final int MIN_RPM = 1000, MAX_RPM = 5800, STEP_RPM = 100;
     private static final int READY_TOLERANCE_RPM = 100;
+    private static final double FREE_RPM = 6000;              // motor's top speed, for running by power alone
     private static final File SAVE_FILE = new File("/sdcard/FIRST/biobuzz_flywheel.txt");
 
     private DcMotorEx motor;
@@ -37,6 +38,8 @@ public class Flywheel {
     private boolean reversed;
     private boolean xWas, yWas, aWas;
     private boolean spinning, buzzed;
+    private boolean noEncoder;       // encoder cable missing: run by plain power instead of chasing a speed it can't see
+    private long spinStartedNs;
     private double rpm;
 
     public Flywheel(HardwareMap hardwareMap) {
@@ -90,7 +93,7 @@ public class Flywheel {
                 targetRpm = Math.max(MIN_RPM, Math.min(MAX_RPM, targetRpm + (faster ? STEP_RPM : -STEP_RPM)));
                 gamepad.rumble(targetRpm == before ? 400 : 80);
                 save();
-                if (motor != null) motor.setVelocity(targetRpm / 60.0 * TICKS_PER_REV);
+                if (motor != null && spinning) command();
                 buzzed = false;
             }
         }
@@ -99,21 +102,34 @@ public class Flywheel {
         if (motor == null) return;
 
         if (want && !spinning) {
-            motor.setVelocity(targetRpm / 60.0 * TICKS_PER_REV);
+            command();
             buzzed = false;
+            spinStartedNs = System.nanoTime();
         } else if (!want && spinning) {
             motor.setPower(0);
         }
         spinning = want;
 
         rpm = Math.abs(motor.getVelocity()) / TICKS_PER_REV * 60;
+        // Spinning 1.5 s and the encoder still reads ~0: its cable is out, and chasing the speed would mean full power
+        if (spinning && !noEncoder && rpm < 200 && System.nanoTime() - spinStartedNs > 1_500_000_000L) {
+            noEncoder = true;
+            motor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+            command();
+        }
         if (spinning && !buzzed && ready()) {
             gamepad.rumble(250);   // up to speed: feed with LT
             buzzed = true;
         }
     }
 
+    private void command() {
+        if (noEncoder) motor.setPower(targetRpm / FREE_RPM);
+        else motor.setVelocity(targetRpm / 60.0 * TICKS_PER_REV);
+    }
+
     public boolean ready() {
+        if (noEncoder) return spinning && System.nanoTime() - spinStartedNs > 1_500_000_000L;
         return spinning && Math.abs(rpm - targetRpm) <= READY_TOLERANCE_RPM;
     }
 
@@ -124,6 +140,8 @@ public class Flywheel {
 
     public String status() {
         if (motor == null) return "<font color='#ffb74d'>Flywheel: " + problem + "</font>";
+        if (noEncoder) return String.format("Flywheel: <font color='#ffb74d'>no encoder signal (plug its small cable into Expansion Hub encoder port 1)</font>, running at about %d RPM by power  %s",
+                targetRpm, spinning ? "<b>ON</b>" : "<small>(hold RT)</small>");
         String state = !spinning ? "off  <small>(hold RT)</small>"
                 : ready() ? "<font color='#69f0ae'><b>READY</b></font>, feed with LT"
                 : "<font color='#ffb74d'>spinning up</font>";
