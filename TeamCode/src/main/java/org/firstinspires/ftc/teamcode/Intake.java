@@ -19,11 +19,10 @@ import java.util.List;
  * The intake wheels: one goBILDA 5203 motor, 1620 RPM, through right-angle gears and chains to the wheels.
  *
  * Hold LT: intake pulls in.   Hold LB: intake pushes out.   Neither (or both): stopped.
- * Y: intake faster.   A: intake slower.   (10% steps, 10% to 100%; the screen shows the speed.)
  *
- * The speed and which way is "in" are saved in a small file on the Control Hub, so the speed you
- * settle on stays for the next match. If LT and LB come out backward, press B on the INIT screen
- * (before ▶) to swap them. No code change or reinstall needed.
+ * Set up on the INIT screen (before ▶), saved on the Control Hub for every match after:
+ *   B: swap in/out if they come out backward.   D-pad left/right: intake slower/faster (10% steps).
+ * During the match LT and LB are the only intake buttons.
  *
  * Robot configuration: any motor that isn't one of the four drive wheels (or "flywheel") counts as the intake,
  * whatever it was named, so it works with "intake" or any other name.
@@ -31,7 +30,7 @@ import java.util.List;
 public class Intake {
 
     private static final double MOTOR_RPM = 1620;
-    private static final int STEP = 10;           // percent per Y/A press
+    private static final int STEP = 10;           // percent per D-pad press on the INIT screen
     private static final double TRIGGER = 0.3;   // how far LT has to be pulled to count
     private static final File SAVE_FILE = new File("/sdcard/FIRST/biobuzz_intake.txt");
 
@@ -39,7 +38,7 @@ public class Intake {
     public final List<String> names = new ArrayList<>();
     private String problem = "";
     private boolean swapped;
-    private boolean bWasDown, yWasDown, aWasDown;
+    private boolean bWasDown, leftWasDown, rightWasDown;
     private int percent = 100;
     private double power;
     private double amps;
@@ -79,31 +78,24 @@ public class Intake {
         return !motors.isEmpty();
     }
 
-    /** Call every loop on the INIT screen: B swaps which button pulls in, and saves it. */
-    public boolean checkSwapButton(Gamepad gamepad) {
-        boolean pressed = gamepad.b && !bWasDown;
+    /** Call every loop on the INIT screen: B swaps in/out, D-pad left/right = speed. Saved. True if changed. */
+    public boolean checkInitButtons(Gamepad gamepad) {
+        boolean swap = gamepad.b && !bWasDown;
+        boolean faster = gamepad.dpad_right && !rightWasDown, slower = gamepad.dpad_left && !leftWasDown;
         bWasDown = gamepad.b;
-        if (pressed) {
-            swapped = !swapped;
-            save();
-            gamepad.rumble(200);
-        }
-        return pressed;
+        rightWasDown = gamepad.dpad_right;
+        leftWasDown = gamepad.dpad_left;
+        if (!swap && !faster && !slower) return false;
+        if (swap) swapped = !swapped;
+        int before = percent;
+        if (faster || slower) percent = Math.max(STEP, Math.min(100, percent + (faster ? STEP : -STEP)));
+        gamepad.rumble(swap || percent != before ? 120 : 400);   // long buzz = already at the top/bottom
+        save();
+        return true;
     }
 
-    /** Call every loop while driving. speedButtons = false while RT is held (Y/A then belong to the flywheel). */
-    public void update(Gamepad gamepad, boolean speedButtons) {
-        // Y / A: change the speed once per press (not every loop while held)
-        boolean faster = speedButtons && gamepad.y && !yWasDown, slower = speedButtons && gamepad.a && !aWasDown;
-        yWasDown = gamepad.y;
-        aWasDown = gamepad.a;
-        if (faster || slower) {
-            int before = percent;
-            percent = Math.max(STEP, Math.min(100, percent + (faster ? STEP : -STEP)));
-            gamepad.rumble(percent == before ? 400 : 80);   // long buzz = already at the top/bottom
-            save();
-        }
-
+    /** Call every loop while driving. */
+    public void update(Gamepad gamepad) {
         boolean in = gamepad.left_trigger > TRIGGER;
         boolean out = gamepad.left_bumper;
         double speed = percent / 100.0;
@@ -136,19 +128,14 @@ public class Intake {
                 amps = total;
             });
         }
-        return String.format("Intake: %s  <b>%d%%</b> %s %.0f motor RPM  %.1fA   <small>(LT in · LB out · Y/A speed)</small>",
+        return String.format("Intake: %s  <b>%d%%</b> %s %.0f motor RPM  %.1fA   <small>(LT in · LB out)</small>",
                 doing, percent, bar(), MOTOR_RPM * percent / 100, amps);
     }
 
     public String buttonsHelp() {
         if (!available()) return problem.isEmpty() ? "No intake motor found. Add the intake motor to the robot configuration." : problem;
-        return "Intake (" + String.join(", ", names) + "): hold LT = in, LB = out, Y/A = faster/slower (now "
-             + percent + "%)." + (swapped ? " [swapped]" : "") + " Backward? Press B now to swap.";
-    }
-
-    /** Plain-text speed for screens without HTML. */
-    public String speedText() {
-        return String.format("Intake speed %d%% (%.0f motor RPM), Y/A to change", percent, MOTOR_RPM * percent / 100);
+        return "Intake (" + String.join(", ", names) + "): hold LT = in, LB = out. Speed " + percent + "% (D-pad ←/→ now)."
+             + (swapped ? " [swapped]" : "") + " Backward? Press B now.";
     }
 
     private String bar() {

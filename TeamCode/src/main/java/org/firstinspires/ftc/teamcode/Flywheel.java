@@ -16,7 +16,7 @@ import java.io.File;
  *
  * Hold RT: flywheel spins up and holds its speed (the encoder keeps it there between shots).
  *          The controller buzzes once when it's up to speed: then LT feeds balls in.
- * While holding RT, Y / A change the flywheel speed (100 RPM steps) instead of the intake speed.
+ * Y / A: flywheel faster / slower (100 RPM steps), any time while driving.
  * The speed and direction are saved on the Control Hub.
  *
  * The wheel's side facing the intake must move UP. If it spins the other way, press X on the INIT screen.
@@ -79,25 +79,19 @@ public class Flywheel {
         return true;
     }
 
-    /** True while RT is held: then Y/A belong to the flywheel, not the intake. */
-    public boolean held(Gamepad gamepad) {
-        return gamepad.right_trigger > 0.3;
-    }
 
     /** Call every loop while driving. */
     public void update(Gamepad gamepad) {
-        boolean want = held(gamepad);
+        boolean want = gamepad.right_trigger > 0.3;
         boolean changed = false;
-        if (want) {
-            boolean faster = gamepad.y && !yWas, slower = gamepad.a && !aWas;
-            if (faster || slower) {
-                int before = targetRpm;
-                targetRpm = Math.max(MIN_RPM, Math.min(MAX_RPM, targetRpm + (faster ? STEP_RPM : -STEP_RPM)));
-                gamepad.rumble(targetRpm == before ? 400 : 80);
-                save();
-                changed = true;
-                buzzed = false;
-            }
+        boolean faster = gamepad.y && !yWas, slower = gamepad.a && !aWas;
+        if (faster || slower) {
+            int before = targetRpm;
+            targetRpm = Math.max(MIN_RPM, Math.min(MAX_RPM, targetRpm + (faster ? STEP_RPM : -STEP_RPM)));
+            gamepad.rumble(targetRpm == before ? 400 : 80);
+            save();
+            changed = true;
+            buzzed = false;
         }
         yWas = gamepad.y;
         aWas = gamepad.a;
@@ -154,12 +148,12 @@ public class Flywheel {
         String state = !spinning ? "off  <small>(hold RT)</small>"
                 : ready() ? "<font color='#69f0ae'><b>READY</b></font>, feed with LT"
                 : "<font color='#ffb74d'>spinning up</font>";
-        return String.format("Flywheel: %s   %.0f / <b>%d RPM</b>  <small>(RT + Y/A: speed)</small>", state, rpm, targetRpm);
+        return String.format("Flywheel: %s   %.0f / <b>%d RPM</b>  <small>(Y/A: speed)</small>", state, rpm, targetRpm);
     }
 
     public String help() {
         if (motor == null) return problem;
-        return "Flywheel: hold RT to spin (" + targetRpm + " RPM), RT + Y/A = speed. Spinning the wrong way? Press X now.";
+        return "Flywheel: hold RT to spin (" + targetRpm + " RPM), Y/A = speed. Spinning the wrong way? Press X now.";
     }
 
     private void load() {
