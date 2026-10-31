@@ -13,16 +13,25 @@ import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /*
- * The intake wheels: one goBILDA 5203 motor, 1620 RPM, through right-angle gears and chains to the wheels.
+ * The intake wheels: a goBILDA 5203 1620 RPM motor ("intake", Expansion Hub motor port 0) through right-angle gears
+ * and chains to the wheels, plus a helper motor on the other end of the same axle ("intake2", motor port 2): a 6000 RPM
+ * for now, a second 1620 later. Every intake motor runs by power, so any goBILDA motor works with no code change,
+ * with or without an encoder (an encoder only adds a speed readout in the Intake Test). A motor whose cable is
+ * out just doesn't turn; nothing else changes.
  *
  * Hold LT: intake pulls in.   Hold LB: intake pushes out.   Neither (or both): stopped.
  *
  * Set up on the INIT screen (before ▶), saved on the Control Hub for every match after:
  *   B: swap in/out if they come out backward.   D-pad left/right: intake slower/faster (10% steps).
  * During the match LT and LB are the only intake buttons.
+ *
+ * Two motors on one axle MUST turn the same way, or they fight (and the weaker one cooks). Each motor's own
+ * direction is set in the Intake Test op mode (one motor at a time) and saved here; B above flips them all together.
  *
  * Robot configuration: any motor that isn't one of the four drive wheels (or "flywheel") counts as the intake,
  * whatever it was named, so it works with "intake" or any other name.
@@ -34,8 +43,12 @@ public class Intake {
     private static final double TRIGGER = 0.3;   // how far LT has to be pulled to count
     private static final File SAVE_FILE = new File("/sdcard/FIRST/biobuzz_intake.txt");
 
+    private static final double ENCODER_FULL_SPEED = 2800;   // counts/s at top speed for EVERY goBILDA motor (28 per motor turn)
+
     private final List<DcMotorSimple> motors = new ArrayList<>();
     public final List<String> names = new ArrayList<>();
+    private final Set<String> flipped = new HashSet<>();      // motors that run the other way from the rest
+    private boolean[] sawEncoder = new boolean[0];
     private String problem = "";
     private boolean swapped;
     private boolean bWasDown, leftWasDown, rightWasDown;
@@ -68,9 +81,13 @@ public class Intake {
                 problem = "Intake motor \"" + name + "\" answered very slowly: is the Expansion Hub plugged in and powered?";
                 continue;
             }
-            motors.add(m);
-            names.add(name);
+            // Keep them in name order ("intake", then "intake2") so "motor 1" and "motor 2" never change
+            int at = 0;
+            while (at < names.size() && names.get(at).compareTo(name) < 0) at++;
+            motors.add(at, m);
+            names.add(at, name);
         }
+        sawEncoder = new boolean[motors.size()];
         load();
     }
 
@@ -104,11 +121,69 @@ public class Intake {
         if (guard.isDown()) power = Double.NaN;   // unknown while the hub isn't answering: resend on the next try
         if (p == power) return;   // only talk to the hub when something changes
         if (!guard.ready(p != 0)) return;
-        if (guard.run(() -> { for (DcMotorSimple m : motors) m.setPower(p); })) power = p;
+        if (guard.run(() -> { for (int i = 0; i < motors.size(); i++) motors.get(i).setPower(direction(i) * p); })) power = p;
+    }
+
+    private double direction(int i) {
+        return flipped.contains(names.get(i)) ? -1 : 1;
+    }
+
+    public int count() {
+        return motors.size();
+    }
+
+    public boolean isFlipped(int i) {
+        return flipped.contains(names.get(i));
+    }
+
+    /** Intake Test: reverse just this one motor (saved). */
+    public void flip(int i) {
+        String name = names.get(i);
+        if (!flipped.remove(name)) flipped.add(name);
+        save();
+    }
+
+    /**
+     * Intake Test: spin motor `only` (or all of them, -1) the IN way at power p; 0 stops. The motors left out
+     * coast so they don't hold the axle back. Only talks to the hub when something changes.
+     */
+    public void test(int only, double p) {
+        String want = only + "/" + p;
+        if (want.equals(lastTest) && !guard.isDown()) return;
+        if (!guard.ready(p != 0)) return;
+        double in = swapped ? -p : p;
+        if (guard.run(() -> {
+            for (int i = 0; i < motors.size(); i++) {
+                boolean on = p != 0 && (only < 0 || only == i);
+                DcMotorSimple m = motors.get(i);
+                if (m instanceof DcMotor) ((DcMotor) m).setZeroPowerBehavior(on || p == 0
+                        ? DcMotor.ZeroPowerBehavior.BRAKE : DcMotor.ZeroPowerBehavior.FLOAT);
+                m.setPower(on ? direction(i) * in : 0);
+            }
+        })) lastTest = want;
+        power = Double.NaN;   // the match code resends its own power afterward
+    }
+    private String lastTest = "";
+
+    /** Intake Test: amps and (if it has an encoder) speed of one motor. */
+    public String motorReading(int i) {
+        DcMotorSimple m = motors.get(i);
+        if (!(m instanceof DcMotorEx) || guard.isDown()) return "";
+        double[] r = new double[2];
+        if (!guard.run(() -> { r[0] = ((DcMotorEx) m).getCurrent(CurrentUnit.AMPS); r[1] = ((DcMotorEx) m).getVelocity(); })) return "";
+        if (Math.abs(r[1]) > 20) sawEncoder[i] = true;
+        return String.format("%.1f A", r[0]) + (sawEncoder[i]
+                ? String.format(", encoder: %.0f%% of top speed", Math.abs(r[1]) / ENCODER_FULL_SPEED * 100)
+                : ", no encoder (fine)");
     }
 
     public void stop() {
-        if (!guard.isDown()) guard.run(() -> { for (DcMotorSimple m : motors) m.setPower(0); });
+        if (!guard.isDown()) guard.run(() -> {
+            for (DcMotorSimple m : motors) {
+                if (m instanceof DcMotor) ((DcMotor) m).setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+                m.setPower(0);
+            }
+        });
         power = 0;
     }
 
@@ -135,7 +210,8 @@ public class Intake {
     public String buttonsHelp() {
         if (!available()) return problem.isEmpty() ? "No intake motor found. Add the intake motor to the robot configuration." : problem;
         return "Intake (" + String.join(", ", names) + "): hold LT = in, LB = out. Speed " + percent + "% (D-pad ←/→ now)."
-             + (swapped ? " [swapped]" : "") + " Backward? Press B now.";
+             + (swapped ? " [swapped]" : "") + " Backward? Press B now."
+             + (motors.size() > 1 ? " Motors fighting each other? Fix it in the Intake Test op mode." : "");
     }
 
     private String bar() {
@@ -152,6 +228,9 @@ public class Intake {
                 if (line.equals("swapped")) swapped = true;                    // older one-word file
                 if (line.startsWith("swapped=")) swapped = line.endsWith("true");
                 if (line.startsWith("speed=")) percent = Math.max(STEP, Math.min(100, Integer.parseInt(line.substring(6))));
+                if (line.startsWith("flipped=")) {
+                    for (String n : line.substring(8).split(",")) if (!n.trim().isEmpty()) flipped.add(n.trim());
+                }
             }
         } catch (RuntimeException ignored) {
             // A broken file just means the starting settings
@@ -159,6 +238,7 @@ public class Intake {
     }
 
     private void save() {
-        ReadWriteFile.writeFile(SAVE_FILE, "swapped=" + swapped + "\nspeed=" + percent + "\n");
+        ReadWriteFile.writeFile(SAVE_FILE, "swapped=" + swapped + "\nspeed=" + percent
+                + "\nflipped=" + String.join(",", flipped) + "\n");
     }
 }
