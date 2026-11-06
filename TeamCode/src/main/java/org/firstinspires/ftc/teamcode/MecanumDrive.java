@@ -22,7 +22,7 @@ import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
  *   Y / A        flywheel faster / slower
  *   RB (hold)    brake down, wheels stop
  */
-@TeleOp(name = "Mecanum Drive", group = "BioBuzz")
+@TeleOp(name = "Mecanum Drive")   // no group = always first in the Driver Hub list
 public class MecanumDrive extends LinearOpMode {
 
     private static final double DEADZONE = 0.06;      // ignore tiny stick wobble
