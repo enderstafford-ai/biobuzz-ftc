@@ -75,6 +75,7 @@ public class WheelTest extends LinearOpMode {
         while (opModeIsActive()) {
             double dt = Math.min(loopTimer.seconds(), 0.1);
             loopTimer.reset();
+            Pad.use(gamepad1);
             gyro.update();
 
             if (pressed(0, gamepad1.right_bumper) && step < STEPS.length - 1) enterStep(++step);
@@ -82,7 +83,7 @@ public class WheelTest extends LinearOpMode {
 
             telemetry.addLine(String.format("<big><b>Wheel Test</b></big>  Step %d of %d: <b>%s</b>",
                     step + 1, STEPS.length, STEPS[step]));
-            telemetry.addLine("<small><font color='" + DIM + "'>RB = next step · LB = back</font></small>");
+            telemetry.addLine(Pad.text("<small><font color='" + DIM + "'>{RB} = next step · {LB} = back</font></small>"));
 
             if (step == 0) wheelStep();
             else if (step == 1) patternStep();
@@ -145,17 +146,17 @@ public class WheelTest extends LinearOpMode {
         telemetry.addLine("<tt>" + wheelCell(0, p) + "  " + wheelCell(1, p) + "</tt>");
         telemetry.addLine("<tt>" + wheelCell(2, p) + "  " + wheelCell(3, p) + "</tt>");
         telemetry.addLine(String.format("Selected: <b>%s</b> (port %d)", DriveWheels.LABELS[selected], DriveWheels.PORTS[selected]));
-        telemetry.addLine("<b>Hold A.</b> Check BOTH:");
+        telemetry.addLine(Pad.text("<b>Hold {A}.</b> Check BOTH:"));
         telemetry.addLine("  • the <b>highlighted</b> wheel is the one spinning (not another one)");
         telemetry.addLine("  • it rolls the way the robot drives <b>forward</b>");
-        telemetry.addLine("Both right? Press <b>X</b> (it moves to the next wheel).");
-        telemetry.addLine("Rolls backward? Press <b>B</b> to flip it.");
+        telemetry.addLine(Pad.text("Both right? Press <b>{X}</b> (it moves to the next wheel)."));
+        telemetry.addLine(Pad.text("Rolls backward? Press <b>{B}</b> to flip it."));
         telemetry.addLine("A <i>different</i> wheel spins? Its cable is in the wrong port. Ports: "
                 + "front left 0, back left 1, front right 2, back right 3. "
                 + "<small>(Front right and back left swapped is the usual one: swap the cables in ports 1 and 2.)</small>");
         String amps = ampsWarning(boxAmps, 1.0);
         if (!amps.isEmpty()) telemetry.addLine("<font color='" + WARN + "'>" + amps + "</font>");
-        telemetry.addLine("<small>D-pad: pick wheel · Y: all four forward</small>");
+        telemetry.addLine(Pad.text("<small>D-pad: pick wheel · {Y}: all four forward</small>"));
     }
 
     private String wheelCell(int wheel, double[] p) {
@@ -181,7 +182,7 @@ public class WheelTest extends LinearOpMode {
                 + "wheels on OPPOSITE corners look <b>identical</b>.");
         telemetry.addLine("If both left wheels look the same, two wheels are on the wrong corners. "
                 + "It drives forward fine but slides badly, and step 4 will show it.");
-        telemetry.addLine("<b>X</b> = looks right · <b>B</b> = doesn't.  "
+        telemetry.addLine(Pad.text("<b>{X}</b> = looks right · <b>{B}</b> = doesn't.  ")
                 + (pattern.isEmpty() ? "" : "You said: <b>" + pattern + "</b>"));
     }
 
@@ -236,7 +237,7 @@ public class WheelTest extends LinearOpMode {
                 if (podsSwapped) {
                     check.setMeasured(measuredGyro, 0, 0);
                     sensorsResult = "PODS SWAPPED: the X and Y cables on the Pinpoint are in each other's ports. "
-                            + "Swap them, then press Y and do this step again.";
+                            + Pad.text("Swap them, then press {Y} and do this step again.");
                 } else {
                     check.setMeasured(measuredGyro, measuredX, measuredY);
                     sensorsResult = "saved. Gyro " + (measuredGyro > 0 ? "normal" : "counts backward (fine, now known)")
@@ -253,7 +254,7 @@ public class WheelTest extends LinearOpMode {
         } else {
             boolean bad = !sensorsResult.startsWith("saved");
             telemetry.addLine("<font color='" + (bad ? BAD : GOOD) + "'><b>Sensors " + sensorsResult + "</b></font>");
-            telemetry.addLine("Press RB for the floor test.  <small>Y = do this step again</small>");
+            telemetry.addLine(Pad.text("Press {RB} for the floor test.  <small>{Y} = do this step again</small>"));
         }
     }
 
@@ -290,7 +291,7 @@ public class WheelTest extends LinearOpMode {
         lastHeading = gyro.heading();
 
         telemetry.addLine("Robot on the floor with room around it. It moves ONLY while you hold:");
-        telemetry.addLine("  <b>A</b> = drive forward · <b>B</b> = slide right · <b>X</b> = spin clockwise");
+        telemetry.addLine(Pad.text("  <b>{A}</b> = drive forward · <b>{B}</b> = slide right · <b>{X}</b> = spin clockwise"));
         telemetry.addLine("Hold each one for about 2 feet (1 second for the spin), then let go.");
         if (check.gyroSign == 0 || (gyro.hasPosition() && (check.xPodSign == 0 || check.yPodSign == 0))) {
             telemetry.addLine("<font color='" + WARN + "'>Do step 3 first so the pods and gyro can measure this.</font>");
@@ -322,7 +323,7 @@ public class WheelTest extends LinearOpMode {
         if (test.equals("forward")) {
             if (!pods) { forwardResult = "?watch it: did it go straight?"; return; }
             if (movedFwd <= -2) { forwardResult = "!it went BACKWARD. Redo step 1 (wheel directions)."; return; }
-            if (movedFwd < 6) { forwardResult = "?hold A longer (2 feet)"; return; }
+            if (movedFwd < 6) { forwardResult = Pad.text("?hold {A} longer (2 feet)"); return; }
             double drift = Math.abs(movedRight) / movedFwd * 12, turn = Math.abs(turnedCw) / movedFwd * 12;
             forwardResult = drift < 1.5 && turn < 8
                     ? String.format("ok: straight (%.1f in sideways per foot)", drift)
@@ -338,7 +339,7 @@ public class WheelTest extends LinearOpMode {
                 slideResult = "!barely slides. Most likely 2 wheels on the wrong corners (step 2) or a slipping belt.";
                 return;
             }
-            if (movedRight < 6) { slideResult = "?hold B longer (2 feet)"; return; }
+            if (movedRight < 6) { slideResult = Pad.text("?hold {B} longer (2 feet)"); return; }
             double drift = Math.abs(movedFwd) / movedRight * 12, turn = Math.abs(turnedCw) / movedRight * 12;
             slideResult = drift < 3 && turn < 10
                     ? String.format("ok: straight (%.1f in forward/back per foot)", drift)
@@ -347,7 +348,7 @@ public class WheelTest extends LinearOpMode {
                             drift, movedFwd > 0 ? "forward" : "backward", turn);
         } else if (test.equals("spin")) {
             if (check.gyroSign == 0) { spinResult = "?watch it: did it turn in place?"; return; }
-            if (testTime < 0.7) { spinResult = "?hold X longer (1 second)"; return; }
+            if (testTime < 0.7) { spinResult = Pad.text("?hold {X} longer (1 second)"); return; }
             double rate = turnedCw / testTime;
             if (rate < 0) spinResult = "!turned the WRONG way (counterclockwise). Redo step 1.";
             else if (rate < 40) spinResult = String.format("!weak turning (%.0f°/s). Check step 1 (front right and "

@@ -91,12 +91,12 @@ public class Brake {
     public String status() {
         if (servo == null) return "<font color='#ffb74d'>Brake: " + problem + "</font>";
         if (guard.isDown()) return "<font color='#ff5252'>" + guard.problem() + "</font>";
-        return isDown ? "<font color='#ff5252'><b>BRAKE DOWN</b></font> (wheels stopped)" : "Brake: up  <small>(hold RB)</small>";
+        return isDown ? "<font color='#ff5252'><b>BRAKE DOWN</b></font> (wheels stopped)" : Pad.text("Brake: up  <small>(hold {RB})</small>");
     }
 
     public String help() {
         if (servo == null) return problem;
-        return String.format("Brake: hold RB. Down position %.2f (up %.2f): D-pad down = further, D-pad up = less.", down, UP);
+        return Pad.text(String.format("Brake: hold {RB}. Down position %.2f (up %.2f): D-pad down = further, D-pad up = less.", down, UP));
     }
 
     private void load() {

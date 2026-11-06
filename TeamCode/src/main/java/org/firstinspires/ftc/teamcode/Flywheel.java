@@ -144,16 +144,16 @@ public class Flywheel {
         if (motor == null) return "<font color='#ffb74d'>Flywheel: " + problem + "</font>";
         if (guard.isDown()) return "<font color='#ff5252'>" + guard.problem() + "</font>";
         if (noEncoder) return String.format("Flywheel: <font color='#ffb74d'>no encoder signal (plug its small cable into Expansion Hub encoder port 1)</font>, running at about %d RPM by power  %s",
-                targetRpm, spinning ? "<b>ON</b>" : "<small>(hold RT)</small>");
-        String state = !spinning ? "off  <small>(hold RT)</small>"
-                : ready() ? "<font color='#69f0ae'><b>READY</b></font>, feed with LT"
+                targetRpm, spinning ? "<b>ON</b>" : Pad.text("<small>(hold {RT})</small>"));
+        String state = !spinning ? "off  <small>(hold {RT})</small>"
+                : ready() ? "<font color='#69f0ae'><b>READY</b></font>, feed with {LT}"
                 : "<font color='#ffb74d'>spinning up</font>";
-        return String.format("Flywheel: %s   %.0f / <b>%d RPM</b>  <small>(Y/A: speed)</small>", state, rpm, targetRpm);
+        return Pad.text(String.format("Flywheel: %s   %.0f / <b>%d RPM</b>  <small>({Y}/{A}: speed)</small>", state, rpm, targetRpm));
     }
 
     public String help() {
         if (motor == null) return problem;
-        return "Flywheel: hold RT to spin (" + targetRpm + " RPM), Y/A = speed. Spinning the wrong way? Press X now.";
+        return Pad.text("Flywheel: hold {RT} to spin (" + targetRpm + " RPM), {Y}/{A} = speed. Spinning the wrong way? Press {X} now.");
     }
 
     private void load() {

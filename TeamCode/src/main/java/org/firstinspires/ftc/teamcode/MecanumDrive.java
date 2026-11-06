@@ -45,6 +45,7 @@ public class MecanumDrive extends LinearOpMode {
         telemetry.setDisplayFormat(Telemetry.DisplayFormat.HTML);
         String changed = "";
         while (opModeInInit()) {
+            Pad.use(gamepad1);
             if (intake.checkInitButtons(gamepad1)) changed = "Intake setting saved.";
             if (brake.checkAdjustButtons(gamepad1)) changed = "Brake shown at its new down position. It goes back up at ▶.";
             if (flywheel.checkFlipButton(gamepad1)) changed = "Flywheel direction flipped.";
@@ -71,6 +72,7 @@ public class MecanumDrive extends LinearOpMode {
         while (opModeIsActive()) {
             double dt = Math.min(loopTimer.seconds(), 0.1);
             loopTimer.reset();
+            Pad.use(gamepad1);
 
             double forward = deadzone(-gamepad1.left_stick_y);  // stick up is negative, so flip it
             double strafe  = deadzone(gamepad1.left_stick_x);
@@ -154,8 +156,8 @@ public class MecanumDrive extends LinearOpMode {
     }
 
     private static String controlsHelp() {
-        return "<small><font color='#9e9e9e'>Left stick: drive + slide · Right stick: spin · D-pad: nudge · "
-             + "LT/LB: intake in/out · RT: flywheel · Y/A: flywheel speed · RB: brake</font></small>";
+        return Pad.text("<small><font color='#9e9e9e'>Left stick: drive + slide · Right stick: spin · D-pad: nudge · "
+             + "{LT}/{LB}: intake in/out · {RT}: flywheel · {Y}/{A}: flywheel speed · {RB}: brake</font></small>");
     }
 
     private static String wheel(double p) {

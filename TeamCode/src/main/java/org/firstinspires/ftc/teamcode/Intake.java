@@ -203,15 +203,15 @@ public class Intake {
                 amps = total;
             });
         }
-        return String.format("Intake: %s  <b>%d%%</b> %s %.0f motor RPM  %.1fA   <small>(LT in · LB out)</small>",
-                doing, percent, bar(), MOTOR_RPM * percent / 100, amps);
+        return Pad.text(String.format("Intake: %s  <b>%d%%</b> %s %.0f motor RPM  %.1fA   <small>({LT} in · {LB} out)</small>",
+                doing, percent, bar(), MOTOR_RPM * percent / 100, amps));
     }
 
     public String buttonsHelp() {
         if (!available()) return problem.isEmpty() ? "No intake motor found. Add the intake motor to the robot configuration." : problem;
-        return "Intake (" + String.join(", ", names) + "): hold LT = in, LB = out. Speed " + percent + "% (D-pad ←/→ now)."
-             + (swapped ? " [swapped]" : "") + " Backward? Press B now."
-             + (motors.size() > 1 ? " Motors fighting each other? Fix it in the Intake Test op mode." : "");
+        return Pad.text("Intake (" + String.join(", ", names) + "): hold {LT} = in, {LB} = out. Speed " + percent + "% (D-pad ←/→ now)."
+             + (swapped ? " [swapped]" : "") + " Backward? Press {B} now."
+             + (motors.size() > 1 ? " Motors fighting each other? Fix it in the Intake Test op mode." : ""));
     }
 
     private String bar() {

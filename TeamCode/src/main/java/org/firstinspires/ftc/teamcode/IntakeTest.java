@@ -35,6 +35,7 @@ public class IntakeTest extends LinearOpMode {
 
         int selected = 0;
         while (opModeIsActive()) {
+            Pad.use(gamepad1);
             int n = intake.count();
             if (n > 0) {
                 if (pressed(0, gamepad1.dpad_down)) selected = (selected + 1) % n;
@@ -57,10 +58,10 @@ public class IntakeTest extends LinearOpMode {
                             intake.isFlipped(i) ? " [flipped]" : "", spinning, DIM, intake.motorReading(i)));
                 }
                 telemetry.addLine("");
-                telemetry.addLine("Hold <b>A</b>: only the ▶ motor spins. It must pull balls IN. If it pushes out, press <b>B</b>.");
-                telemetry.addLine("Do it for every motor (D-pad ↑/↓ picks), then hold <b>Y</b>: all together should pull in "
-                        + "smoothly. Grinding or buzzing with Y = one is still backward.");
-                telemetry.addLine("<small><font color='" + DIM + "'>Everything pushes out instead? Press B on the "
+                telemetry.addLine(Pad.text("Hold <b>{A}</b>: only the ▶ motor spins. It must pull balls IN. If it pushes out, press <b>{B}</b>."));
+                telemetry.addLine(Pad.text("Do it for every motor (D-pad ↑/↓ picks), then hold <b>{Y}</b>: all together should pull in "
+                        + "smoothly. Grinding or buzzing with {Y} = one is still backward."));
+                telemetry.addLine("<small><font color='" + DIM + "'>Everything pushes out instead? Press " + Pad.text("{B}") + " on the "
                         + "Mecanum Drive INIT screen (swaps in/out for all of them).</font></small>");
                 telemetry.addLine(intake.status());
             }

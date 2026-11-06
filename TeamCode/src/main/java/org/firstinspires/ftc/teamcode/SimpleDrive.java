@@ -22,12 +22,14 @@ public class SimpleDrive extends LinearOpMode {
         Intake intake = new Intake(hardwareMap);
         Brake brake = new Brake(hardwareMap);
         Flywheel flywheel = new Flywheel(hardwareMap);
+        Pad.use(gamepad1);
         telemetry.addLine("Simple Drive: last year's drive math, full power, no gyro. Press ▶.");
         telemetry.addLine(intake.buttonsHelp());
         telemetry.addLine(brake.help());
         telemetry.addLine(flywheel.help());
         telemetry.update();
         while (opModeInInit()) {
+            Pad.use(gamepad1);
             boolean swapped = intake.checkInitButtons(gamepad1);
             boolean flipped = flywheel.checkFlipButton(gamepad1);
             if (swapped || flipped || brake.checkAdjustButtons(gamepad1)) {
@@ -42,6 +44,7 @@ public class SimpleDrive extends LinearOpMode {
         brake.raiseAfterAdjusting();
 
         while (opModeIsActive()) {
+            Pad.use(gamepad1);
             double forward = -gamepad1.left_stick_y;
             double strafe  =  gamepad1.left_stick_x;
             double turn    =  gamepad1.right_stick_x;
