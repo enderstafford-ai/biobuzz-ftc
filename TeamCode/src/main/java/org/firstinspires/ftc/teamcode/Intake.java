@@ -48,7 +48,7 @@ public class Intake {
     private final List<DcMotorSimple> motors = new ArrayList<>();
     public final List<String> names = new ArrayList<>();
     private final Set<String> flipped = new HashSet<>();      // motors that run the other way from the rest
-    private boolean[] sawEncoder = new boolean[0];
+    private boolean[] sawEncoder;                             // per motor: has its encoder ever counted?
     private String problem = "";
     private boolean swapped;
     private boolean bWasDown, leftWasDown, rightWasDown;
@@ -56,6 +56,7 @@ public class Intake {
     private double power;
     private double amps;
     private int statusCalls;
+    private String lastTest = "";                             // what Intake Test last asked for, so it is only sent once
     private final Guard guard = new Guard("Intake");
 
     public Intake(HardwareMap hardwareMap) {
@@ -77,7 +78,7 @@ public class Intake {
                 problem = "Intake motor \"" + name + "\" not answering: is the Expansion Hub plugged in and powered?";
                 continue;
             }
-            if (System.nanoTime() - started > 150_000_000L) {
+            if (System.nanoTime() - started > Guard.INIT_TOO_SLOW_NS) {
                 problem = "Intake motor \"" + name + "\" answered very slowly: is the Expansion Hub plugged in and powered?";
                 continue;
             }
@@ -163,7 +164,6 @@ public class Intake {
         })) lastTest = want;
         power = Double.NaN;   // the match code resends its own power afterward
     }
-    private String lastTest = "";
 
     /** Intake Test: amps and (if it has an encoder) speed of one motor. */
     public String motorReading(int i) {

@@ -16,13 +16,20 @@ import org.firstinspires.ftc.robotcore.external.navigation.YawPitchRollAngles;
  *       (Control Hub I2C Bus 0, type "goBILDA Pinpoint Odometry Computer"). It reads the two
  *       odometry pods (the little spring-loaded omni wheels under the robot) plus its own gyro.
  * Backup: the gyro inside the Control Hub, named "imu". Only used when there's no working Pinpoint.
- * Neither working: heading hold just turns off.
+ * Neither working: the autonomous just stops steering itself straight; everything else carries on.
+ *
+ * Mecanum Drive does not use this at all (plain driving). The autonomous and Wheel Test do.
  *
  * Why the care: asking a sensor that doesn't answer, over and over, jams the Control Hub's
  * motor chip (motors stop, battery reads 0.00 V). So each sensor is checked once at INIT, and
  * dropped for the rest of the run if it stops answering. It never gets asked again.
  */
 public class HeadingSensor {
+
+    /** Odometry pod counts per inch of travel (goBILDA 4-bar pod). */
+    public static final double POD_TICKS_PER_INCH = 505.3;
+    /** Where the pods sit, in inches from the center of the robot (last year's tuned numbers, team 19439, same drivetrain). */
+    public static final double X_POD_SIDE_OFFSET = 2.625, Y_POD_BACK_OFFSET = 4.625;
 
     private static final int GIVE_UP_AFTER = 20;   // bad reads in a row before a sensor is dropped
 
@@ -42,12 +49,11 @@ public class HeadingSensor {
                 pinpoint = null;
                 problem = "Pinpoint not answering: check its I2C cable goes to I2C port 0 on the Control Hub";
             } else {
-                // Pod type, directions and positions from last year's tuned code (team 19439, same drivetrain):
-                // X pod 2.625" right of center, Y pod 4.625" behind center
+                // Pod type and directions from last year's tuned code: X pod right of center, Y pod behind center
                 pinpoint.setEncoderResolution(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD);
                 pinpoint.setEncoderDirections(GoBildaPinpointDriver.EncoderDirection.REVERSED,
                                               GoBildaPinpointDriver.EncoderDirection.FORWARD);
-                pinpoint.setOffsets(-2.625, -4.625, DistanceUnit.INCH);
+                pinpoint.setOffsets(-X_POD_SIDE_OFFSET, -Y_POD_BACK_OFFSET, DistanceUnit.INCH);
                 pinpoint.resetPosAndIMU();                   // robot must sit still for a moment at INIT
                 return;
             }
@@ -89,7 +95,7 @@ public class HeadingSensor {
             if (++badReads >= GIVE_UP_AFTER) {
                 pinpoint = null;
                 imu = null;
-                problem = "Gyro/Pinpoint stopped answering (loose cable?), heading hold off until restart. Driving still works.";
+                problem = "Gyro/Pinpoint stopped answering (loose cable?). Off until restart. Driving still works.";
             }
         }
     }
@@ -100,7 +106,7 @@ public class HeadingSensor {
             if (pinpoint.getDeviceStatus() == GoBildaPinpointDriver.DeviceStatus.FAULT_BAD_READ) {
                 if (++badReads >= GIVE_UP_AFTER) {
                     pinpoint = null;
-                    problem = "Pinpoint stopped answering (loose cable?), heading hold off until restart";
+                    problem = "Pinpoint stopped answering (loose cable?). Off until restart";
                 }
             } else {
                 badReads = 0;
@@ -111,7 +117,7 @@ public class HeadingSensor {
             if (angles.getAcquisitionTime() == 0) {   // the SDK's "no answer"
                 if (++badReads >= GIVE_UP_AFTER) {
                     imu = null;
-                    problem = "Hub gyro stopped answering, heading hold off until restart";
+                    problem = "Hub gyro stopped answering. Off until restart";
                 }
             } else {
                 badReads = 0;
@@ -125,12 +131,11 @@ public class HeadingSensor {
         return heading;
     }
 
-    public double xInches() {
-        return pinpoint == null ? 0 : pinpoint.getPosX(DistanceUnit.INCH);
-    }
-
-    public double yInches() {
-        return pinpoint == null ? 0 : pinpoint.getPosY(DistanceUnit.INCH);
+    /** An angle difference folded into -180..180 degrees (so 350 degrees one way reads as 10 the other way). */
+    public static double wrap(double degrees) {
+        while (degrees > 180) degrees -= 360;
+        while (degrees < -180) degrees += 360;
+        return degrees;
     }
 
     /** Raw pod counts, for checking the pod cables (0 when there's no Pinpoint). */
@@ -140,10 +145,6 @@ public class HeadingSensor {
 
     public int yPodTicks() {
         return pinpoint == null ? 0 : pinpoint.getEncoderY();
-    }
-
-    public String sourceName() {
-        return pinpoint != null ? "Pinpoint" : imu != null ? "hub gyro" : "none";
     }
 
     /** What's wrong with the gyro/Pinpoint in plain words, or "" when it's fine. */

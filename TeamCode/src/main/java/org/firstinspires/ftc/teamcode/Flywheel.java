@@ -30,6 +30,8 @@ public class Flywheel {
     private static final int MIN_RPM = 1000, MAX_RPM = 5800, STEP_RPM = 100;
     private static final int READY_TOLERANCE_RPM = 100;
     private static final double FREE_RPM = 6000;              // motor's top speed, for running by power alone
+    private static final long ENCODER_CHECK_NS = 1_500_000_000L;   // spinning this long with no encoder counts = its cable is out
+    private static final long INIT_TOO_SLOW_NS = 2 * Guard.INIT_TOO_SLOW_NS;   // INIT sends several commands, so allow double
     private static final File SAVE_FILE = new File("/sdcard/FIRST/biobuzz_flywheel.txt");
 
     private DcMotorEx motor;
@@ -53,7 +55,7 @@ public class Flywheel {
             motor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);   // coast down, don't slam the wheel
             motor.setVelocityPIDFCoefficients(40, 0.01, 4, 14.5);
             motor.setDirection(reversed ? DcMotorSimple.Direction.REVERSE : DcMotorSimple.Direction.FORWARD);
-            if (System.nanoTime() - started > 300_000_000L) {
+            if (System.nanoTime() - started > INIT_TOO_SLOW_NS) {
                 motor = null;
                 problem = "Flywheel motor answered very slowly: is the Expansion Hub plugged in and powered?";
             }
@@ -78,7 +80,6 @@ public class Flywheel {
         gamepad.rumble(200);
         return true;
     }
-
 
     /** Call every loop while driving. */
     public void update(Gamepad gamepad) {
@@ -118,7 +119,7 @@ public class Flywheel {
 
         rpm = Math.abs(motor.getVelocity()) / TICKS_PER_REV * 60;
         // Spinning 1.5 s and the encoder still reads ~0: its cable is out, and chasing the speed would mean full power
-        if (spinning && !noEncoder && rpm < 200 && System.nanoTime() - spinStartedNs > 1_500_000_000L) {
+        if (spinning && !noEncoder && rpm < 200 && System.nanoTime() - spinStartedNs > ENCODER_CHECK_NS) {
             noEncoder = true;
             motor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
             command();
@@ -131,7 +132,7 @@ public class Flywheel {
     }
 
     public boolean ready() {
-        if (noEncoder) return spinning && System.nanoTime() - spinStartedNs > 1_500_000_000L;
+        if (noEncoder) return spinning && System.nanoTime() - spinStartedNs > ENCODER_CHECK_NS;
         return spinning && Math.abs(rpm - targetRpm) <= READY_TOLERANCE_RPM;
     }
 

@@ -71,8 +71,30 @@ public class DriveWheels {
         motors[BR].setPower(br);
     }
 
+    public void setPowers(double[] p) {
+        setPowers(p[FL], p[FR], p[BL], p[BR]);
+    }
+
     public void stop() {
         setPowers(0, 0, 0, 0);
+    }
+
+    /**
+     * The mecanum math, in one place: how hard each wheel pushes (in FL, FR, BL, BR order) for a drive of
+     * forward, strafe (+ = right) and turn (+ = clockwise). If any wheel would need more than full power,
+     * all four are scaled down together, so the robot still goes the direction asked, just slower.
+     */
+    public static double[] mix(double forward, double strafe, double turn) {
+        double[] power = {
+            forward + strafe + turn,   // front left
+            forward - strafe - turn,   // front right
+            forward - strafe + turn,   // back left
+            forward + strafe - turn,   // back right
+        };
+        double biggest = 1.0;
+        for (double p : power) biggest = Math.max(biggest, Math.abs(p));
+        for (int i = 0; i < 4; i++) power[i] /= biggest;
+        return power;
     }
 
     private void load() {

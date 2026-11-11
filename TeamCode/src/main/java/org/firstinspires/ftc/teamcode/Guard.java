@@ -10,6 +10,9 @@ package org.firstinspires.ftc.teamcode;
  */
 public class Guard {
 
+    /** At INIT: one first command taking longer than this means that hub isn't plugged in or powered. */
+    public static final long INIT_TOO_SLOW_NS = 150_000_000L;
+
     private static final long SLOW_NS = 80_000_000L;       // a normal hub call takes 2-3 ms
     private static final int STRIKES = 2;                   // slow calls in a row before giving up
     private static final long RETRY_NS = 2_000_000_000L;

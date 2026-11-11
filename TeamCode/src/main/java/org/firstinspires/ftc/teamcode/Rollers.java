@@ -52,7 +52,7 @@ public class Rollers {
                 problem = "Roller \"" + name + "\" not answering: is its hub plugged in and powered?";
                 continue;
             }
-            if (System.nanoTime() - started > 150_000_000L) {
+            if (System.nanoTime() - started > Guard.INIT_TOO_SLOW_NS) {
                 problem = "Roller \"" + name + "\" answered very slowly: is its hub plugged in and powered?";
                 continue;
             }

@@ -8,6 +8,7 @@ import com.qualcomm.robotcore.util.ReadWriteFile;
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 
 import java.io.File;
+import java.util.Arrays;
 
 /*
  * BioBuzz 38196 - autonomous: LEAVE (3 points) + PARK in our LOADING ZONE (5 points).
@@ -42,7 +43,6 @@ public abstract class ParkAuto extends LinearOpMode {
     private static final double FORWARD_POWER = 0.35;
     private static final double SLIDE_POWER = 0.45;
     private static final double RAMP_PER_SEC = 2.0;        // gentle start so the wheels don't slip
-    private static final double POD_TICKS_PER_INCH = 505.3;
     private static final double HOLD_KP = 0.03;            // keeps the robot facing straight while it moves
     private static final double HOLD_MAX = 0.25;
     // Time fallback when the pods don't count: rough speeds at the powers above (inches per second)
@@ -90,7 +90,7 @@ public abstract class ParkAuto extends LinearOpMode {
             telemetry.addLine(String.format("Wait first: <b>%.0f s</b>  <small>(D-pad left/right)</small>", delaySeconds));
             telemetry.addLine("Distances: " + (gyro.hasPosition() ? "odometry pods" : "<font color='#ffb74d'>by time (no Pinpoint)</font>")
                     + "   Straight: " + (gyro.available() && check.gyroSign != 0 ? "gyro"
-                    : "<font color='#ffb74d'>off (spin once in Mecanum Drive to check the gyro)</font>"));
+                    : "<font color='#ffb74d'>off (do step 3 of the Wheel Test op mode once so the gyro is checked)</font>"));
             if (!gyro.problem().isEmpty()) telemetry.addLine("<font color='#ffb74d'>" + gyro.problem() + "</font>");
             telemetry.addLine("Keep the robot still. Press ▶ when the match starts.");
             telemetry.update();
@@ -138,7 +138,7 @@ public abstract class ParkAuto extends LinearOpMode {
             gyro.update();
             if (gyro.hasPosition()) {   // keep the last good count if the Pinpoint just dropped out
                 ticks = podTicks(slide);
-                moved = Math.abs(ticks - startTicks) / POD_TICKS_PER_INCH;
+                moved = Math.abs(ticks - startTicks) / HeadingSensor.POD_TICKS_PER_INCH;
             }
 
             // Pods not counting at all after half a second of driving: they're not working, use time instead
@@ -160,7 +160,7 @@ public abstract class ParkAuto extends LinearOpMode {
 
             // Blocked? The pods stopped moving while we're pushing
             if (usePods) {
-                if (Math.abs(ticks - stallTicks) / POD_TICKS_PER_INCH > 0.3) {
+                if (Math.abs(ticks - stallTicks) / HeadingSensor.POD_TICKS_PER_INCH > 0.3) {
                     stallTicks = ticks;
                     stallTimer.reset();
                 } else if (stallTimer.seconds() > STALL_SECONDS) {
@@ -169,7 +169,7 @@ public abstract class ParkAuto extends LinearOpMode {
                         break;
                     }
                     wheels.stop();
-                    java.util.Arrays.fill(applied, 0);
+                    Arrays.fill(applied, 0);
                     show("Blocked, waiting a second...");
                     sleep(1000);
                     stallTicks = podTicks(slide);
@@ -184,7 +184,7 @@ public abstract class ParkAuto extends LinearOpMode {
             double f = forward * power * scale, s = sideways * power * scale * 1.1;
             double turn = 0;
             if (check.gyroSign != 0 && gyro.available()) {
-                double error = check.gyroSign * wrap(gyro.heading() - startHeading);
+                double error = check.gyroSign * HeadingSensor.wrap(gyro.heading() - startHeading);
                 turn = clip(HOLD_KP * error, HOLD_MAX);
             }
             drive(f, s, turn, dt);
@@ -192,26 +192,20 @@ public abstract class ParkAuto extends LinearOpMode {
                     inches, usePods ? "" : " (by time)"));
         }
         wheels.stop();
-        java.util.Arrays.fill(applied, 0);
+        Arrays.fill(applied, 0);
         sleep(150);   // let it settle before the next leg
     }
 
+    /** Sends one loop's worth of drive power, ramping up gently so the wheels don't slip. */
     private void drive(double forward, double strafe, double turn, double dt) {
-        double[] target = {
-            forward + strafe + turn,
-            forward - strafe - turn,
-            forward - strafe + turn,
-            forward + strafe - turn,
-        };
-        double biggest = 1.0;
-        for (double t : target) biggest = Math.max(biggest, Math.abs(t));
+        double[] target = DriveWheels.mix(forward, strafe, turn);
+        double step = RAMP_PER_SEC * dt;
         for (int i = 0; i < 4; i++) {
-            double want = target[i] / biggest;
-            double step = RAMP_PER_SEC * dt;
+            double want = target[i];
             if (Math.abs(want) > Math.abs(applied[i])) want = Math.max(applied[i] - step, Math.min(applied[i] + step, want));
             applied[i] = want;
         }
-        wheels.setPowers(applied[0], applied[1], applied[2], applied[3]);
+        wheels.setPowers(applied);
     }
 
     private int podTicks(boolean sideways) {
@@ -226,12 +220,6 @@ public abstract class ParkAuto extends LinearOpMode {
 
     private static double clip(double v, double limit) {
         return Math.max(-limit, Math.min(limit, v));
-    }
-
-    private static double wrap(double degrees) {
-        while (degrees > 180) degrees -= 360;
-        while (degrees < -180) degrees += 360;
-        return degrees;
     }
 
     private void load() {

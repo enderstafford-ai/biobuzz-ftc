@@ -39,7 +39,7 @@ public class Brake {
             long started = System.nanoTime();
             servo.setDirection(Servo.Direction.FORWARD);
             servo.setPosition(UP);
-            if (System.nanoTime() - started > 150_000_000L) {
+            if (System.nanoTime() - started > Guard.INIT_TOO_SLOW_NS) {
                 servo = null;
                 problem = "Brake servo answered very slowly: is the Expansion Hub plugged in and powered?";
             }

@@ -18,7 +18,7 @@ import java.util.Arrays;
  *      X: "this one's right" (the highlighted wheel spun, rolling forward).  Y: all four forward.
  * 2. Roller pattern: a picture of what the wheels should look like from above.  X = looks right, B = doesn't.
  * 3. Sensors, by hand (robot on the floor, wheels free): push it forward, push it right, turn it clockwise.
- *      Finds which way the odometry pods and gyro count, and saves it for Mecanum Drive.  Y: start over.
+ *      Finds which way the odometry pods and gyro count, and saves it for the autonomous.  Y: start over.
  * 4. Floor test: hold A = drive forward, hold B = slide right, hold X = spin clockwise, all slow.
  *      The robot ONLY moves while you hold the button. The pods measure what it really did.
  * 5. Results.
@@ -28,7 +28,7 @@ public class WheelTest extends LinearOpMode {
 
     private static final double BOX_POWER = 0.3;
     private static final double FLOOR_POWER = 0.25;
-    private static final double TICKS_PER_INCH = 505.3;   // goBILDA 4-bar pod
+    private static final double TICKS_PER_INCH = HeadingSensor.POD_TICKS_PER_INCH;
     private static final String[] STEPS = {"Which wheel is which", "Roller pattern", "Sensors (push by hand)",
                                            "Floor test", "Results"};
     private static final String GOOD = "#69f0ae", BAD = "#ff8a65", WARN = "#ffd54f", DIM = "#9e9e9e";
@@ -109,13 +109,6 @@ public class WheelTest extends LinearOpMode {
         boolean edge = down && !was[slot];
         was[slot] = down;
         return edge;
-    }
-
-    /** Angle difference folded into -180..180 degrees. */
-    private static double wrap(double degrees) {
-        while (degrees > 180) degrees -= 360;
-        while (degrees < -180) degrees += 360;
-        return degrees;
     }
 
     // ---------------------------------------------------------------- 1. Which wheel is which
@@ -205,7 +198,7 @@ public class WheelTest extends LinearOpMode {
         }
         double dx = (gyro.xPodTicks() - startX) / TICKS_PER_INCH;
         double dy = (gyro.yPodTicks() - startY) / TICKS_PER_INCH;
-        turned += wrap(gyro.heading() - lastHeading);
+        turned += HeadingSensor.wrap(gyro.heading() - lastHeading);
         lastHeading = gyro.heading();
 
         telemetry.addLine("Robot on the floor. The wheels roll freely now; push it with your hands.");
@@ -276,13 +269,13 @@ public class WheelTest extends LinearOpMode {
         if (floorTest.equals("forward")) f = FLOOR_POWER;
         if (floorTest.equals("slide")) s = FLOOR_POWER;
         if (floorTest.equals("spin")) t = FLOOR_POWER;
-        wheels.setPowers(f + s + t, f - s - t, f - s + t, f + s - t);   // same mixing as Mecanum Drive
+        wheels.setPowers(DriveWheels.mix(f, s, t));   // the same math Mecanum Drive uses
 
         if (!floorTest.isEmpty()) {
             testTime += dt;
             if (check.xPodSign != 0) movedFwd += check.xPodSign * (x - lastX) / TICKS_PER_INCH;
             if (check.yPodSign != 0) movedRight += check.yPodSign * (y - lastY) / TICKS_PER_INCH;
-            if (check.gyroSign != 0) turnedCw += -check.gyroSign * wrap(gyro.heading() - lastHeading);
+            if (check.gyroSign != 0) turnedCw += -check.gyroSign * HeadingSensor.wrap(gyro.heading() - lastHeading);
             for (int i = 0; i < 4; i++) ampSum[i] += wheels.motors[i].getCurrent(CurrentUnit.AMPS);
             ampSamples++;
         }
@@ -309,9 +302,6 @@ public class WheelTest extends LinearOpMode {
         telemetry.addLine("Spin: " + show(spinResult));
         if (!ampResult.isEmpty()) telemetry.addLine("<font color='" + WARN + "'>" + ampResult + "</font>");
     }
-
-    private static final double X_POD_SIDE_OFFSET = 2.625;   // inches from the center of the robot
-    private static final double Y_POD_BACK_OFFSET = 4.625;
 
     private void judge(String test) {
         double[] avg = new double[4];
@@ -355,10 +345,10 @@ public class WheelTest extends LinearOpMode {
                     + "back left swapped?) and step 2.", rate);
             else spinResult = String.format("ok: %.0f° per second", rate);
             // The pods aren't at the robot's center, so even a perfect spin in place rolls each pod around a circle
-            // (X pod 2.625 in. to the side, Y pod 4.625 in. behind, from last year's code). Take that part out;
+            // (the X pod sits to the side, the Y pod behind: see HeadingSensor). Take that part out;
             // only what's left over is the robot really sliding. (Which way each pod counts doesn't matter here.)
             double radians = Math.toRadians(Math.abs(turnedCw));
-            double circleFwd = X_POD_SIDE_OFFSET * radians, circleRight = Y_POD_BACK_OFFSET * radians;
+            double circleFwd = HeadingSensor.X_POD_SIDE_OFFSET * radians, circleRight = HeadingSensor.Y_POD_BACK_OFFSET * radians;
             double slid = Math.abs(Math.abs(movedFwd) - circleFwd) + Math.abs(Math.abs(movedRight) - circleRight);
             if (pods && slid > Math.max(6, 0.4 * (circleFwd + circleRight)) && !spinResult.startsWith("!")) {
                 spinResult = "!turns but also slides around (" + Math.round(slid)

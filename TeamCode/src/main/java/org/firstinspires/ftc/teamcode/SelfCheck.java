@@ -5,58 +5,24 @@ import com.qualcomm.robotcore.util.ReadWriteFile;
 import java.io.File;
 
 /*
- * Learns which way the gyro and the two odometry pods count, by watching the robot while you drive.
+ * Remembers which way the gyro and the two odometry pods count.
  *
- * A gyro or pod that counts the "wrong" way (mounted upside down, cable reversed, settings guessed wrong)
- * turns a correction into a push in the WRONG direction: the robot fights you instead of helping.
- * So nothing is assumed. When you spin with the right stick, the robot sees which way the heading moves;
- * when you drive straight forward or straight sideways, it sees which way each pod counts. Until a sensor
- * has been checked, the correction that uses it stays off. Results are saved on the robot, and keep being
- * re-checked, so a remounted sensor gets re-learned by itself.
+ * A gyro or pod that counts the "wrong" way (mounted upside down, cable reversed) would turn a correction
+ * into a push in the WRONG direction. So nothing is assumed: Wheel Test step 3 has you push the robot by
+ * hand, sees which way each sensor counts, and saves it here (a small file on the Control Hub).
+ * Until a sensor has been checked its sign is 0, and whatever would use it stays off.
+ *
+ * Used by: the autonomous (steering straight) and Wheel Test (measuring the floor test).
  */
 public class SelfCheck {
 
     private static final File SAVE_FILE = new File("/sdcard/FIRST/biobuzz_checks.txt");
 
-    private static final double GYRO_PROOF = 15;    // (spin power x degrees turned) before deciding
-    private static final double POD_PROOF = 800;    // (drive power x pod ticks) before deciding, about 3 inches
-
-    // +1 or -1 once learned, 0 = not checked yet
+    /** +1 = counts the normal way, -1 = counts backward, 0 = not checked yet. */
     public int gyroSign, xPodSign, yPodSign;
-    private double gyroEvidence, xEvidence, yEvidence;
 
     public SelfCheck() {
         load();
-    }
-
-    /** Driver is spinning with the right stick. Positive turn spins clockwise, so the heading should go down. */
-    public void spun(double turn, double headingChangeDeg) {
-        gyroEvidence += -turn * headingChangeDeg;
-        if (Math.abs(gyroEvidence) > GYRO_PROOF) {
-            int learned = gyroEvidence > 0 ? 1 : -1;
-            gyroEvidence = 0;
-            if (learned != gyroSign) { gyroSign = learned; save(); }
-        }
-    }
-
-    /** Driver is pushing straight forward/back. Forward pod should count with the push. */
-    public void droveForward(double forward, int xTicksChange) {
-        xEvidence += forward * xTicksChange;
-        if (Math.abs(xEvidence) > POD_PROOF) {
-            int learned = xEvidence > 0 ? 1 : -1;
-            xEvidence = 0;
-            if (learned != xPodSign) { xPodSign = learned; save(); }
-        }
-    }
-
-    /** Driver is pushing straight sideways (positive = right). Sideways pod should count with the push. */
-    public void droveSideways(double strafe, int yTicksChange) {
-        yEvidence += strafe * yTicksChange;
-        if (Math.abs(yEvidence) > POD_PROOF) {
-            int learned = yEvidence > 0 ? 1 : -1;
-            yEvidence = 0;
-            if (learned != yPodSign) { yPodSign = learned; save(); }
-        }
     }
 
     /** Results from Wheel Test's push-by-hand step (0 = not measured, keeps the old value). */

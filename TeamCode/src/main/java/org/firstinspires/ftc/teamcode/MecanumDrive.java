@@ -9,6 +9,8 @@ import com.qualcomm.robotcore.util.ElapsedTime;
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
 
+import java.util.Arrays;
+
 /*
  * BioBuzz 38196 - the match TeleOp. Plain mecanum: the wheels do exactly what the sticks say,
  * no gyro or odometry corrections (those were taken out 10/30: they could fight a sideways slide).
@@ -94,17 +96,9 @@ public class MecanumDrive extends LinearOpMode {
                 power   = NUDGE_POWER;
             }
 
-            double[] target = {
-                forward + strafe + turn,   // front left
-                forward - strafe - turn,   // front right
-                forward - strafe + turn,   // back left
-                forward + strafe - turn,   // back right
-            };
-            // Keep every wheel within -1..1 without changing the direction of travel
-            double biggest = 1.0;
-            for (double t : target) biggest = Math.max(biggest, Math.abs(t));
+            double[] target = DriveWheels.mix(forward, strafe, turn);
             for (int i = 0; i < 4; i++) {
-                double want = target[i] * power / biggest;
+                double want = target[i] * power;
                 // Ramp up gently (less wheel slip), but slow down / stop right away
                 if (want * applied[i] < 0) applied[i] = 0;
                 if (Math.abs(want) > Math.abs(applied[i])) {
@@ -113,8 +107,8 @@ public class MecanumDrive extends LinearOpMode {
                 }
                 applied[i] = want;
             }
-            if (brake.update(gamepad1)) java.util.Arrays.fill(applied, 0);   // brake down: wheels don't fight it
-            wheels.setPowers(applied[0], applied[1], applied[2], applied[3]);
+            if (brake.update(gamepad1)) Arrays.fill(applied, 0);   // brake down: wheels don't fight it
+            wheels.setPowers(applied);
             intake.update(gamepad1);
             flywheel.update(gamepad1);
             rollers.update(gamepad1);
