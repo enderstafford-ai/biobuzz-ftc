@@ -21,6 +21,7 @@ import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
  *   RT (hold)    flywheel; buzz = ready
  *   Y / A        flywheel faster / slower
  *   RB (hold)    brake down, wheels stop
+ *   X / B (hold) rollers in / out
  */
 @TeleOp(name = "Mecanum Drive")   // no group = always first in the Driver Hub list
 public class MecanumDrive extends LinearOpMode {
@@ -41,6 +42,7 @@ public class MecanumDrive extends LinearOpMode {
         Intake intake = new Intake(hardwareMap);
         Brake brake = new Brake(hardwareMap);
         Flywheel flywheel = new Flywheel(hardwareMap);
+        Rollers rollers = new Rollers(hardwareMap);
 
         telemetry.setDisplayFormat(Telemetry.DisplayFormat.HTML);
         String changed = "";
@@ -54,6 +56,7 @@ public class MecanumDrive extends LinearOpMode {
             telemetry.addLine(intake.buttonsHelp());
             telemetry.addLine(brake.help());
             telemetry.addLine(flywheel.help());
+            telemetry.addLine(rollers.help());
             telemetry.addLine(controlsHelp());
             telemetry.update();
             sleep(20);
@@ -114,6 +117,7 @@ public class MecanumDrive extends LinearOpMode {
             wheels.setPowers(applied[0], applied[1], applied[2], applied[3]);
             intake.update(gamepad1);
             flywheel.update(gamepad1);
+            rollers.update(gamepad1);
 
             // Battery and motor current change slowly; read them a few times a second
             if (loops++ % 10 == 0) {
@@ -139,6 +143,7 @@ public class MecanumDrive extends LinearOpMode {
             }
             telemetry.addLine(intake.status());
             telemetry.addLine(flywheel.status());
+            telemetry.addLine(rollers.status());
             telemetry.addLine(brake.status());
             telemetry.addLine(String.format("<small><tt>FL %s  FR %s  BL %s  BR %s</tt></small>",
                     wheel(applied[0]), wheel(applied[1]), wheel(applied[2]), wheel(applied[3])));
@@ -149,6 +154,7 @@ public class MecanumDrive extends LinearOpMode {
         intake.stop();
         brake.raise();
         flywheel.stop();
+        rollers.stop();
     }
 
     private static double deadzone(double v) {
@@ -157,7 +163,7 @@ public class MecanumDrive extends LinearOpMode {
 
     private static String controlsHelp() {
         return Pad.text("<small><font color='#9e9e9e'>Left stick: drive + slide · Right stick: spin · D-pad: nudge · "
-             + "{LT}/{LB}: intake in/out · {RT}: flywheel · {Y}/{A}: flywheel speed · {RB}: brake</font></small>");
+             + "{LT}/{LB}: intake in/out · {X}/{B}: rollers in/out · {RT}: flywheel · {Y}/{A}: flywheel speed · {RB}: brake</font></small>");
     }
 
     private static String wheel(double p) {
