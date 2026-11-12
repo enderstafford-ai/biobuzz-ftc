@@ -1,17 +1,26 @@
 package org.firstinspires.ftc.teamcode;
 
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
 import android.util.Size;
+
+import com.acmerobotics.dashboard.FtcDashboard;
 
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.robotcore.external.hardware.camera.WebcamName;
+import org.firstinspires.ftc.robotcore.internal.camera.calibration.CameraCalibration;
 import org.firstinspires.ftc.vision.VisionPortal;
+import org.firstinspires.ftc.vision.VisionProcessor;
 import org.firstinspires.ftc.vision.apriltag.AprilTagClusterDetection;
 import org.firstinspires.ftc.vision.apriltag.AprilTagDetection;
 import org.firstinspires.ftc.vision.apriltag.AprilTagProcessor;
 import org.firstinspires.ftc.vision.apriltag.AprilTagSingleDetection;
+
+import org.opencv.core.Mat;
 
 import java.util.List;
 
@@ -21,7 +30,9 @@ import java.util.List;
  *
  * The tags (IDs 30-45, 3.25 in.) are stuck on the BOTTOM of the four HIVE CELLS, facing down at the floor,
  * about 44 in. up, so the camera has to look UP to see them. The SDK already knows every BIOBUZZ tag.
- * To see what the camera sees: on the INIT screen, Driver Hub ⋮ menu → Camera Stream.
+ * To see what the camera sees: on the INIT screen, Driver Hub ⋮ menu → Camera Stream (tap the picture to refresh it).
+ * Live video, also after ▶: FTC Dashboard on the Mac (http://192.168.43.1:8080/dash).
+ * A green crosshair marks the middle of the picture: aim the camera so the HIVE CELL tags sit on it.
  */
 @TeleOp(name = "Camera Test", group = "BioBuzz")
 public class CameraTest extends LinearOpMode {
@@ -50,7 +61,9 @@ public class CameraTest extends LinearOpMode {
                 .setCamera(cams.get(0))
                 .setCameraResolution(new Size(640, 480))           // the C270's calibrated size: distances are right
                 .addProcessor(tags)
+                .addProcessor(new Crosshair())
                 .build();
+        FtcDashboard.getInstance().startCameraStream(camera, 10);
 
         while (opModeInInit() || opModeIsActive()) {
             telemetry.addLine("<big><b>Camera Test</b></big>  <small>(" + cams.get(0).getDeviceName() + ")</small>");
@@ -78,13 +91,45 @@ public class CameraTest extends LinearOpMode {
                     ids.append(ids.length() == 0 ? "" : ", ").append(t.id).append(t.metadata == null ? " (not BIOBUZZ)" : "");
                 }
                 if (ids.length() > 0) telemetry.addLine("Tags seen: <b>" + ids + "</b>");
-                telemetry.addLine(String.format("<small><font color='%s'>Camera %.0f frames/s · see it: ⋮ → Camera Stream (before ▶)</font></small>",
+                telemetry.addLine(String.format("<small><font color='%s'>Camera %.0f frames/s · see it: ⋮ → Camera Stream (before ▶) or FTC Dashboard on the Mac</font></small>",
                         DIM, camera.getFps()));
             }
             telemetry.update();
             sleep(50);
         }
+        FtcDashboard.getInstance().stopCameraStream();
         camera.close();
+    }
+
+    /** Draws a crosshair at the middle of the camera picture (only on the picture; it changes nothing it reads). */
+    static class Crosshair implements VisionProcessor {
+        private final Paint line = new Paint();
+
+        Crosshair() {
+            line.setColor(Color.GREEN);
+            line.setAntiAlias(true);
+        }
+
+        @Override
+        public void init(int width, int height, CameraCalibration calibration) {
+        }
+
+        @Override
+        public Object processFrame(Mat frame, long captureTimeNanos) {
+            return null;
+        }
+
+        @Override
+        public void onDrawFrame(Canvas canvas, int width, int height, float scaleBmpPxToCanvasPx, float scaleCanvasDensity, Object userContext) {
+            float cx = width / 2f, cy = height / 2f, arm = Math.min(width, height) / 8f;
+            line.setStrokeWidth(Math.max(2, 3 * scaleCanvasDensity));
+            line.setStyle(Paint.Style.STROKE);
+            canvas.drawLine(cx - arm, cy, cx - arm / 4, cy, line);
+            canvas.drawLine(cx + arm / 4, cy, cx + arm, cy, line);
+            canvas.drawLine(cx, cy - arm, cx, cy - arm / 4, line);
+            canvas.drawLine(cx, cy + arm / 4, cx, cy + arm, line);
+            canvas.drawCircle(cx, cy, arm / 4, line);
+        }
     }
 
     /** Distance and direction from the camera to what it sees, in plain words. */
