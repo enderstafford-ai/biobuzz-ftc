@@ -31,6 +31,7 @@ public class Rollers {
     private final Set<String> flipped = new HashSet<>();
     private String problem = "";
     private double power;
+    private boolean mayBeOn;   // last command wasn't a confirmed stop: keep trying to stop it even while the hub is slow
     private String lastTest = "";
     private final Guard guard = new Guard("Rollers");
 
@@ -75,8 +76,8 @@ public class Rollers {
         double p = in == out ? 0 : in ? 1 : -1;
         if (guard.isDown()) power = Double.NaN;
         if (p == power) return;   // only talk to the hubs when something changes
-        if (!guard.ready(p != 0)) return;
-        if (guard.run(() -> { for (int i = 0; i < servos.size(); i++) servos.get(i).setPower(direction(i) * p); })) power = p;
+        if (!guard.ready(p != 0 || mayBeOn)) return;
+        if (guard.run(() -> { for (int i = 0; i < servos.size(); i++) servos.get(i).setPower(direction(i) * p); })) { power = p; mayBeOn = p != 0; } else mayBeOn = true;
     }
 
     private double direction(int i) {
@@ -98,7 +99,8 @@ public class Rollers {
     public void test(int only, double p) {
         String want = only + "/" + p;
         if (want.equals(lastTest) && !guard.isDown()) return;
-        if (!guard.ready(p != 0)) return;
+        if (!guard.ready(p != 0 || mayBeOn)) return;
+        mayBeOn = true;   // the match code's next stop confirms it
         if (guard.run(() -> {
             for (int i = 0; i < servos.size(); i++) servos.get(i).setPower(p != 0 && (only < 0 || only == i) ? direction(i) * p : 0);
         })) lastTest = want;

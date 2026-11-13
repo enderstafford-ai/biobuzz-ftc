@@ -54,6 +54,7 @@ public class Intake {
     private boolean bWasDown, leftWasDown, rightWasDown;
     private int percent = 100;
     private double power;
+    private boolean mayBeOn;   // last command wasn't a confirmed stop: keep trying to stop it even while the hub is slow
     private double amps;
     private int statusCalls;
     private String lastTest = "";                             // what Intake Test last asked for, so it is only sent once
@@ -121,8 +122,8 @@ public class Intake {
         double p = swapped ? -pull : pull;
         if (guard.isDown()) power = Double.NaN;   // unknown while the hub isn't answering: resend on the next try
         if (p == power) return;   // only talk to the hub when something changes
-        if (!guard.ready(p != 0)) return;
-        if (guard.run(() -> { for (int i = 0; i < motors.size(); i++) motors.get(i).setPower(direction(i) * p); })) power = p;
+        if (!guard.ready(p != 0 || mayBeOn)) return;
+        if (guard.run(() -> { for (int i = 0; i < motors.size(); i++) motors.get(i).setPower(direction(i) * p); })) { power = p; mayBeOn = p != 0; } else mayBeOn = true;
     }
 
     private double direction(int i) {
@@ -151,7 +152,8 @@ public class Intake {
     public void test(int only, double p) {
         String want = only + "/" + p;
         if (want.equals(lastTest) && !guard.isDown()) return;
-        if (!guard.ready(p != 0)) return;
+        if (!guard.ready(p != 0 || mayBeOn)) return;
+        mayBeOn = true;   // the match code's next stop confirms it
         double in = swapped ? -p : p;
         if (guard.run(() -> {
             for (int i = 0; i < motors.size(); i++) {

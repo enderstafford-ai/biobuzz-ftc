@@ -40,6 +40,7 @@ public class Flywheel {
     private boolean reversed;
     private boolean xWas, yWas, aWas;
     private boolean spinning, buzzed;
+    private boolean mayBeOn;   // a command failed while spinning: keep trying to stop it after RT is let go
     private boolean noEncoder;       // encoder cable missing: run by plain power instead of chasing a speed it can't see
     private long spinStartedNs;
     private final Guard guard = new Guard("Flywheel");
@@ -96,9 +97,14 @@ public class Flywheel {
         }
         yWas = gamepad.y;
         aWas = gamepad.a;
-        if (motor == null || !guard.ready(want)) return;
+        if (motor == null || !guard.ready(want || mayBeOn)) return;
         boolean speedChanged = changed;
-        if (!guard.run(() -> drive(want, speedChanged))) spinning = false;   // hub not answering: start over next time
+        if (!guard.run(() -> drive(want, speedChanged))) {
+            spinning = false;   // hub not answering: start over next time
+            mayBeOn = true;
+        } else {
+            mayBeOn = false;
+        }
         if (spinning && !buzzed && ready()) {
             gamepad.rumble(250);   // up to speed: feed with LT
             buzzed = true;
@@ -112,7 +118,7 @@ public class Flywheel {
             spinStartedNs = System.nanoTime();
         } else if (want && speedChanged) {
             command();
-        } else if (!want && spinning) {
+        } else if (!want && (spinning || mayBeOn)) {
             motor.setPower(0);
         }
         spinning = want;
