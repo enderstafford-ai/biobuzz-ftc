@@ -14,8 +14,9 @@ import java.io.File;
  * SKU 5000-0002-4008), "flywheel" on Expansion Hub motor port 1, encoder cable in Expansion Hub encoder port 1.
  * Shoots out the back of the robot.
  *
- * Hold RT: flywheel spins up and holds its speed (the encoder keeps it there between shots).
+ * Hold RT: flywheel spins up and holds its speed (the encoder keeps it there between shots), off when let go.
  *          The controller buzzes once when it's up to speed: then LT feeds balls in.
+ * Tap RT twice quickly: it stays on without holding (two buzzes). One tap of RT: back to normal (hold to spin).
  * Y / A: flywheel faster / slower (100 RPM steps), any time while driving.
  * The speed and direction are saved on the Control Hub.
  *
@@ -30,6 +31,7 @@ public class Flywheel {
     private static final int MIN_RPM = 1000, MAX_RPM = 5800, STEP_RPM = 100;
     private static final int READY_TOLERANCE_RPM = 100;
     private static final double FREE_RPM = 6000;              // motor's top speed, for running by power alone
+    private static final long DOUBLE_TAP_NS = 400_000_000L;   // second tap within this = stay on
     private static final long ENCODER_CHECK_NS = 1_500_000_000L;   // spinning this long with no encoder counts = its cable is out
     private static final long INIT_TOO_SLOW_NS = 2 * Guard.INIT_TOO_SLOW_NS;   // INIT sends several commands, so allow double
     private static final File SAVE_FILE = new File("/sdcard/FIRST/biobuzz_flywheel.txt");
@@ -38,7 +40,9 @@ public class Flywheel {
     private String problem = "";
     private int targetRpm = START_RPM;
     private boolean reversed;
-    private boolean xWas, yWas, aWas;
+    private boolean xWas, yWas, aWas, rtWas;
+    private boolean locked;          // double-tapped: stays on until RT is tapped again
+    private long lastTapNs;
     private boolean spinning, buzzed;
     private boolean mayBeOn;   // a command failed while spinning: keep trying to stop it after RT is let go
     private boolean noEncoder;       // encoder cable missing: run by plain power instead of chasing a speed it can't see
@@ -84,7 +88,23 @@ public class Flywheel {
 
     /** Call every loop while driving. */
     public void update(Gamepad gamepad) {
-        boolean want = gamepad.right_trigger > 0.3;
+        boolean held = gamepad.right_trigger > 0.3;
+        if (held && !rtWas) {   // a new tap
+            long now = System.nanoTime();
+            if (locked) {
+                locked = false;   // one tap: back to normal (still spins while this tap is held)
+                gamepad.rumble(80);
+                lastTapNs = 0;
+            } else if (lastTapNs != 0 && now - lastTapNs < DOUBLE_TAP_NS) {
+                locked = true;
+                gamepad.rumbleBlips(2);
+                lastTapNs = 0;
+            } else {
+                lastTapNs = now;
+            }
+        }
+        rtWas = held;
+        boolean want = held || locked;
         boolean changed = false;
         boolean faster = gamepad.y && !yWas, slower = gamepad.a && !aWas;
         if (faster || slower) {
@@ -143,6 +163,7 @@ public class Flywheel {
     }
 
     public void stop() {
+        locked = false;
         if (motor != null && !guard.isDown()) guard.run(() -> motor.setPower(0));
         spinning = false;
     }
@@ -152,7 +173,9 @@ public class Flywheel {
         if (guard.isDown()) return "<font color='#ff5252'>" + guard.problem() + "</font>";
         if (noEncoder) return String.format("Flywheel: <font color='#ffb74d'>no encoder signal (plug its small cable into Expansion Hub encoder port 1)</font>, running at about %d RPM by power  %s",
                 targetRpm, spinning ? "<b>ON</b>" : Pad.text("<small>(hold {RT})</small>"));
-        String state = !spinning ? "off  <small>(hold {RT})</small>"
+        String state = !spinning ? "off  <small>(hold {RT} · tap twice = stays on)</small>"
+                : locked && ready() ? "<font color='#69f0ae'><b>READY</b></font> <b>· STAYS ON</b>, feed with {LT} <small>(tap {RT} to stop)</small>"
+                : locked ? "<font color='#ffb74d'>spinning up</font> <b>· STAYS ON</b> <small>(tap {RT} to stop)</small>"
                 : ready() ? "<font color='#69f0ae'><b>READY</b></font>, feed with {LT}"
                 : "<font color='#ffb74d'>spinning up</font>";
         return Pad.text(String.format("Flywheel: %s   %.0f / <b>%d RPM</b>  <small>({Y}/{A}: speed)</small>", state, rpm, targetRpm));
@@ -160,7 +183,7 @@ public class Flywheel {
 
     public String help() {
         if (motor == null) return problem;
-        return Pad.text("Flywheel: hold {RT} to spin (" + targetRpm + " RPM), {Y}/{A} = speed. Spinning the wrong way? Press {X} now.");
+        return Pad.text("Flywheel: hold {RT} to spin (" + targetRpm + " RPM), tap {RT} twice = stays on, tap once = back to normal, {Y}/{A} = speed. Spinning the wrong way? Press {X} now.");
     }
 
     private void load() {

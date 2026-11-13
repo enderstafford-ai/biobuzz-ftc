@@ -20,7 +20,7 @@ import java.util.Arrays;
  *   Right stick  spin                        D-pad ←/→    intake slower/faster
  *   D-pad        slow nudge                  D-pad ↑/↓    how far the brake goes down
  *   LT / LB      intake in / out             X            flywheel spinning backward? flip
- *   RT (hold)    flywheel; buzz = ready
+ *   RT (hold)    flywheel; buzz = ready. Tap twice = stays on, tap once = normal again
  *   Y / A        flywheel faster / slower
  *   RB (hold)    brake down, wheels stop
  *   X / B (hold) rollers in / out
@@ -157,7 +157,7 @@ public class MecanumDrive extends LinearOpMode {
 
     private static String controlsHelp() {
         return Pad.text("<small><font color='#9e9e9e'>Left stick: drive + slide · Right stick: spin · D-pad: nudge · "
-             + "{LT}/{LB}: intake in/out · {X}/{B}: rollers in/out · {RT}: flywheel · {Y}/{A}: flywheel speed · {RB}: brake</font></small>");
+             + "{LT}/{LB}: intake in/out · {X}/{B}: rollers in/out · {RT}: flywheel (2 taps = stays on) · {Y}/{A}: flywheel speed · {RB}: brake</font></small>");
     }
 
     private static String wheel(double p) {

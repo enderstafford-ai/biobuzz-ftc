@@ -10,7 +10,7 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
  * Use it to compare with Mecanum Drive. If this drives badly too, the problem is in the robot
  * (wheels, belts, motors), not in the code.
  *
- * Left stick: drive and slide. Right stick: spin. LT/LB: intake, X/B: rollers, RT: flywheel, Y/A: flywheel speed, RB: brake
+ * Left stick: drive and slide. Right stick: spin. LT/LB: intake, X/B: rollers, RT: flywheel (tap twice = stays on), Y/A: flywheel speed, RB: brake
  * (same buttons and INIT-screen settings as Mecanum Drive).
  */
 @TeleOp(name = "Simple Drive (last year's math)", group = "BioBuzz")
