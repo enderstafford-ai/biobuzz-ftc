@@ -94,6 +94,17 @@ public class Brake {
         return isDown ? "<font color='#ff5252'><b>BRAKE DOWN</b></font> (wheels stopped)" : Pad.text("Brake: up  <small>(hold {RB})</small>");
     }
 
+    /** Match screen: a problem in words, or "" when it's fine. */
+    public String trouble() {
+        return servo == null || guard.isDown() ? status() : "";
+    }
+
+    /** Match screen: "Brake up", or a red BRAKE DOWN. */
+    public String compact() {
+        if (servo == null || guard.isDown()) return "Brake <font color='#ff5252'>?</font>";
+        return isDown ? "<font color='#ff5252'><b>BRAKE DOWN</b></font>" : "Brake up";
+    }
+
     public String help() {
         if (servo == null) return problem;
         return Pad.text(String.format("Brake: hold {RB}. Down position %.2f (up %.2f): D-pad down = further, D-pad up = less.", down, UP));

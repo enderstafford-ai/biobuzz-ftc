@@ -122,6 +122,17 @@ public class Rollers {
                 + "   <small>({X} in · {B} out)</small>");
     }
 
+    /** Match screen: a problem in words, or "" when it's fine. */
+    public String trouble() {
+        return !available() || guard.isDown() ? status() : "";
+    }
+
+    /** Match screen: e.g. "Rollers IN". */
+    public String compact() {
+        if (!available() || guard.isDown()) return "Rollers <font color='#ff5252'>?</font>";
+        return power > 0 ? "Rollers <font color='#69f0ae'><b>IN</b></font>" : power < 0 ? "Rollers <font color='#ff8a65'><b>OUT</b></font>" : "Rollers off";
+    }
+
     public String help() {
         if (!available()) return status();
         return Pad.text("Rollers (" + String.join(", ", names) + "): hold {X} = in, {B} = out."

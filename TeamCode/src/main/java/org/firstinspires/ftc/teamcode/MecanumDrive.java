@@ -3,6 +3,7 @@ package org.firstinspires.ftc.teamcode;
 import com.qualcomm.hardware.lynx.LynxModule;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+import com.qualcomm.robotcore.hardware.Gamepad;
 import com.qualcomm.robotcore.hardware.VoltageSensor;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
@@ -14,6 +15,11 @@ import java.util.Arrays;
 /*
  * BioBuzz 38196 - the match TeleOp. Plain mecanum: the wheels do exactly what the sticks say,
  * no gyro or odometry corrections (those were taken out 10/30: they could fight a sideways slide).
+ *
+ * The screen while driving: problems first (red/orange), the flywheel big, then the match clock (counts down from
+ * 2:00; orange at 0:30, red at 0:10) and battery, then intake / rollers / brake / wheels small. Controls list is on INIT.
+ * Buzzes: light tick = flywheel speed step, heavy thud = speed can't go further, 2 quick = flywheel stays on,
+ * 1 quick = back to normal, 3 long = 30 s left, 1 very long = battery low.
  *
  * DRIVING                                  INIT SCREEN (before ▶), saved for every match after
  *   Left stick   drive + slide               B            intake in/out backward? swap
@@ -34,6 +40,12 @@ public class MecanumDrive extends LinearOpMode {
     private static final double NUDGE_POWER = 0.25;   // D-pad nudge speed
     private static final double RAMP_PER_SEC = 8.0;   // 1/8 s from stop to full (stopping is instant)
     private static final double LOW_BATTERY = 11.8;
+    private static final double TELEOP_SECONDS = 120;   // the clock counts down from ▶, like the field timer
+    // 30 seconds left: three long buzzes, both sides (nothing else feels like this)
+    private static final Gamepad.RumbleEffect THIRTY_SECONDS_LEFT = new Gamepad.RumbleEffect.Builder()
+            .addStep(1, 1, 300).addStep(0, 0, 200)
+            .addStep(1, 1, 300).addStep(0, 0, 200)
+            .addStep(1, 1, 300).build();
 
     @Override
     public void runOpMode() {
@@ -70,7 +82,7 @@ public class MecanumDrive extends LinearOpMode {
         double[] amps = new double[4];
         int[] noCurrent = new int[4];   // readings in a row where a wheel was told to go but drew no current
         double volts = battery.getVoltage();
-        boolean warnedBattery = false;
+        boolean warnedBattery = false, warned30 = false;
         int loops = 0;
         ElapsedTime loopTimer = new ElapsedTime();
         ElapsedTime matchTimer = new ElapsedTime();
@@ -123,26 +135,36 @@ public class MecanumDrive extends LinearOpMode {
                     else if (amps[i] > 0.2) noCurrent[i] = 0;
                 }
                 if (volts < LOW_BATTERY && volts > 1 && !warnedBattery) {
-                    gamepad1.rumble(600);
+                    gamepad1.rumble(1.0, 0, 1000);   // one long heavy buzz, once
                     warnedBattery = true;
                 }
             }
 
-            telemetry.addLine(String.format("Battery: <font color='%s'><b>%.2f V</b></font>%s    Time: %s%s",
-                    volts < LOW_BATTERY ? "#ff5252" : "#69f0ae", volts, volts < LOW_BATTERY ? "  LOW, swap after this match" : "",
-                    clock(matchTimer.seconds()), nudging ? "    <font color='#4fc3f7'>nudge</font>" : ""));
+            // Match screen: problems on top, then the shooter big, the clock + battery big, the rest small
+            double left = Math.max(0, TELEOP_SECONDS - matchTimer.seconds());
+            if (left <= 30 && !warned30) {
+                gamepad1.runRumbleEffect(THIRTY_SECONDS_LEFT);
+                warned30 = true;
+            }
             for (int i = 0; i < 4; i++) {
                 if (noCurrent[i] >= 5) telemetry.addLine(String.format(
                         "<font color='#ff5252'><b>%s wheel motor gets no power:</b> its cable is probably out of Control Hub motor port %d.</font>",
                         DriveWheels.LABELS[i], DriveWheels.PORTS[i]));
             }
-            telemetry.addLine(intake.status());
-            telemetry.addLine(flywheel.status());
-            telemetry.addLine(rollers.status());
-            telemetry.addLine(brake.status());
-            telemetry.addLine(String.format("<small><tt>FL %s  FR %s  BL %s  BR %s</tt></small>",
+            for (String t : new String[] {flywheel.trouble(), intake.trouble(), rollers.trouble(), brake.trouble()}) {
+                if (!t.isEmpty()) telemetry.addLine(t);
+            }
+            String big = flywheel.matchLine();
+            if (!big.isEmpty()) telemetry.addLine(big);
+            String clockColor = left <= 10 ? "#ff5252" : left <= 30 ? "#ffb74d" : "#ffffff";
+            String clockWords = left <= 0 ? "  time's up" : left <= 10 ? "  PARK NOW" : left <= 30 ? "  head to the loading zone" : " left";
+            telemetry.addLine(String.format("<big><font color='%s'><b>%s</b>%s</font>    <font color='%s'>%.1f V%s</font></big>",
+                    clockColor, clock(left), clockWords,
+                    volts < LOW_BATTERY ? "#ff5252" : "#69f0ae", volts, volts < LOW_BATTERY ? " LOW, swap after this match" : ""));
+            telemetry.addLine("<small>" + intake.compact() + " · " + rollers.compact() + " · " + brake.compact()
+                    + (nudging ? " · <font color='#4fc3f7'>nudge</font>" : "") + "</small>");
+            telemetry.addLine(String.format("<small><tt><font color='#9e9e9e'>FL %s  FR %s  BL %s  BR %s</font></tt></small>",
                     wheel(applied[0]), wheel(applied[1]), wheel(applied[2]), wheel(applied[3])));
-            telemetry.addLine(controlsHelp());
             telemetry.update();
         }
         wheels.stop();

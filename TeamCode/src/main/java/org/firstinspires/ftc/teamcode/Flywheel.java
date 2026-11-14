@@ -15,11 +15,11 @@ import java.io.File;
  * Shoots out the back of the robot.
  *
  * Hold RT: flywheel spins up and holds its speed (the encoder keeps it there between shots), off when let go.
- *          The controller buzzes once when it's up to speed: then LT feeds balls in.
- * Tap RT twice quickly: it stays on without holding (two buzzes). One tap of RT: back to normal (hold to spin).
+ *          The screen says READY when it's up to speed: then LT feeds balls in.
+ * Tap RT twice quickly: it stays on without holding (two quick buzzes). One tap of RT: back to normal (one buzz).
  * Hold BACK (SHARE on PlayStation-style pads): flywheel turns slowly BACKWARD to free a ball stuck under it.
  *          If the wheel is still spinning fast, it coasts down first.
- * Y / A: flywheel faster / slower (100 RPM steps), any time while driving.
+ * Y / A: flywheel faster / slower (100 RPM steps), any time while driving. Light tick each step, heavy thud = can't go further.
  * The speed and direction are saved on the Control Hub.
  *
  * The wheel's side facing the intake must move UP. If it spins the other way, press X on the INIT screen.
@@ -48,7 +48,7 @@ public class Flywheel {
     private boolean reversing;
     private boolean locked;          // double-tapped: stays on until RT is tapped again
     private long lastTapNs;
-    private boolean spinning, buzzed;
+    private boolean spinning;
     private boolean mayBeOn;   // a command failed while spinning: keep trying to stop it after RT is let go
     private boolean encoderBackward; // encoder counts the opposite way the motor turns: the hub's speed control would just go full power
     private boolean noEncoder;       // encoder cable missing: run by plain power instead of chasing a speed it can't see
@@ -99,7 +99,7 @@ public class Flywheel {
             long now = System.nanoTime();
             if (locked) {
                 locked = false;   // one tap: back to normal (still spins while this tap is held)
-                gamepad.rumble(80);
+                gamepad.rumbleBlips(1);
                 lastTapNs = 0;
             } else if (lastTapNs != 0 && now - lastTapNs < DOUBLE_TAP_NS) {
                 locked = true;
@@ -118,10 +118,10 @@ public class Flywheel {
         if (faster || slower) {
             int before = targetRpm;
             targetRpm = Math.max(MIN_RPM, Math.min(MAX_RPM, targetRpm + (faster ? STEP_RPM : -STEP_RPM)));
-            gamepad.rumble(targetRpm == before ? 400 : 80);
+            if (targetRpm == before) gamepad.rumble(1.0, 0, 400);   // heavy thud: already at the top/bottom
+            else gamepad.rumble(0, 1.0, 80);                       // light tick: one step
             save();
             changed = true;
-            buzzed = false;
         }
         yWas = gamepad.y;
         aWas = gamepad.a;
@@ -132,10 +132,6 @@ public class Flywheel {
             mayBeOn = true;
         } else {
             mayBeOn = false;
-        }
-        if (spinning && !buzzed && ready()) {
-            gamepad.rumble(250);   // up to speed: feed with LT
-            buzzed = true;
         }
     }
 
@@ -157,7 +153,6 @@ public class Flywheel {
         }
         if (want && !spinning) {
             command();
-            buzzed = false;
             spinStartedNs = System.nanoTime();
         } else if (want && speedChanged) {
             command();
@@ -218,6 +213,36 @@ public class Flywheel {
                 : ready() ? "<font color='#69f0ae'><b>READY</b></font>, feed with {LT}"
                 : "<font color='#ffb74d'>spinning up</font>";
         return Pad.text(String.format("Flywheel: %s   %.0f / <b>%d RPM</b>  <small>({Y}/{A}: speed)</small>%s", state, rpm, targetRpm, warn));
+    }
+
+    /** Match screen: a problem in words, or "" when it's fine. */
+    public String trouble() {
+        if (motor == null) return "<font color='#ffb74d'>Flywheel: " + problem + "</font>";
+        if (guard.isDown()) return "<font color='#ff5252'>" + guard.problem() + "</font>";
+        if (noEncoder) return "<font color='#ffb74d'>Flywheel encoder: no signal. Plug its small cable into Expansion Hub encoder port 1 (running by power for now).</font>";
+        if (encoderBackward) return "<font color='#ffb74d'>Flywheel encoder counts backward: the code is keeping the speed.</font>";
+        return "";
+    }
+
+    /** Match screen: the big top line, e.g. READY 3000 RPM · stays on. */
+    public String matchLine() {
+        if (motor == null || guard.isDown()) return "";
+        String word, rest;
+        if (reversing) {
+            word = "<font color='#4fc3f7'>BACKWARD</font>";
+            rest = "";
+        } else if (!spinning) {
+            word = "<font color='#9e9e9e'>Flywheel off</font>";
+            rest = targetRpm + " RPM";
+        } else if (ready()) {
+            word = "<font color='#69f0ae'>READY</font>";
+            rest = targetRpm + " RPM";
+        } else {
+            word = "<font color='#ffb74d'>SPINNING UP</font>";
+            rest = String.format("%.0f → %d", rpm, targetRpm);
+        }
+        if (locked && !reversing) rest += " · stays on";
+        return "<big><big><b>" + word + "</b></big></big>  <big>" + rest + "</big>";
     }
 
     public String help() {

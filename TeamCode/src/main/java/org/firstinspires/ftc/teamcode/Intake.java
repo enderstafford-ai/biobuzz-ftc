@@ -209,6 +209,19 @@ public class Intake {
                 doing, percent, bar(), MOTOR_RPM * percent / 100, amps));
     }
 
+    /** Match screen: a problem in words, or "" when it's fine. */
+    public String trouble() {
+        return !available() || guard.isDown() ? status() : "";
+    }
+
+    /** Match screen: e.g. "Intake IN 70%". */
+    public String compact() {
+        if (!available() || guard.isDown()) return "Intake <font color='#ff5252'>?</font>";
+        double sign = swapped ? -power : power;
+        return (sign > 0 ? "Intake <font color='#69f0ae'><b>IN</b></font>" : sign < 0 ? "Intake <font color='#ff8a65'><b>OUT</b></font>" : "Intake off")
+                + " " + percent + "%";
+    }
+
     public String buttonsHelp() {
         if (!available()) return problem.isEmpty() ? "No intake motor found. Add the intake motor to the robot configuration." : problem;
         return Pad.text("Intake (" + String.join(", ", names) + "): hold {LT} = in, {LB} = out. Speed " + percent + "% (D-pad ←/→ now)."

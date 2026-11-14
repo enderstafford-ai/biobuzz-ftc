@@ -36,7 +36,7 @@ goBILDA 4-motor mecanum drive (belt-driven wheels), REV Control Hub + Expansion 
 | Right stick | spin | D-pad left/right | intake slower/faster |
 | D-pad | slow nudge | D-pad up/down | how far the brake goes down |
 | LT / LB | intake in / out | X | flywheel backward? flip |
-| RT (hold) | flywheel; buzz = ready. Tap twice = stays on (2 buzzes), tap once = normal again | | |
+| RT (hold) | flywheel; screen says READY. Tap twice = stays on (2 quick buzzes), tap once = normal again (1 buzz) | | |
 | BACK / SHARE (hold) | flywheel slowly backward (stuck ball) | | |
 | Y / A | flywheel faster / slower | | |
 | RB (hold) | brake down, wheels stop | | |
