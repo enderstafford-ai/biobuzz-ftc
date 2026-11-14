@@ -19,7 +19,8 @@ import java.util.Arrays;
  * The screen while driving: problems first (red/orange), the flywheel big, then the match clock (counts down from
  * 2:00; orange at 0:30, red at 0:10) and battery, then intake / rollers / brake / wheels small. Controls list is on INIT.
  * Buzzes: light tick = flywheel speed step, heavy thud = speed can't go further, 2 quick = flywheel stays on,
- * 1 quick = back to normal, 3 long = 30 s left, 1 very long = battery low.
+ * 1 quick = back to normal, 3 long = 30 s left, 1 very long = battery low,
+ * 1 long light = field mode on, 2 light ticks = field mode off.
  *
  * DRIVING                                  INIT SCREEN (before ▶), saved for every match after
  *   Left stick   drive + slide               B            intake in/out backward? swap
@@ -28,6 +29,8 @@ import java.util.Arrays;
  *   LT / LB      intake in / out             X            flywheel spinning backward? flip
  *   RT (hold)    flywheel; screen says READY. Tap twice = stays on, tap once = normal again
  *   Y / A        flywheel faster / slower
+ *   R3 (click)   field mode on/off: pushing up = away from you, whichever way the robot faces
+ *                (point the robot away from you when you turn it on). Off = normal driving.
  *   BACK (hold)  flywheel slowly backward: frees a ball stuck under it (SHARE on PlayStation-style)
  *   RB (hold)    brake down, wheels stop
  *   X / B (hold) rollers in / out
@@ -46,6 +49,9 @@ public class MecanumDrive extends LinearOpMode {
             .addStep(1, 1, 300).addStep(0, 0, 200)
             .addStep(1, 1, 300).addStep(0, 0, 200)
             .addStep(1, 1, 300).build();
+    // Field mode off: two light ticks (on = one long light buzz)
+    private static final Gamepad.RumbleEffect FIELD_OFF = new Gamepad.RumbleEffect.Builder()
+            .addStep(0, 1, 80).addStep(0, 0, 120).addStep(0, 1, 80).build();
 
     @Override
     public void runOpMode() {
@@ -58,6 +64,8 @@ public class MecanumDrive extends LinearOpMode {
         Brake brake = new Brake(hardwareMap);
         Flywheel flywheel = new Flywheel(hardwareMap);
         Rollers rollers = new Rollers(hardwareMap);
+        HeadingSensor gyro = new HeadingSensor(hardwareMap);   // only read while field mode is on
+        SelfCheck check = new SelfCheck();                     // which way the gyro counts (Wheel Test step 3)
 
         telemetry.setDisplayFormat(Telemetry.DisplayFormat.HTML);
         String changed = "";
@@ -72,6 +80,8 @@ public class MecanumDrive extends LinearOpMode {
             telemetry.addLine(brake.help());
             telemetry.addLine(flywheel.help());
             telemetry.addLine(rollers.help());
+            telemetry.addLine(Pad.text("Field mode (click the right stick down): " + (fieldModeProblem(gyro, check).isEmpty()
+                    ? "ready. Point the robot AWAY from you, then click." : fieldModeProblem(gyro, check))));
             telemetry.addLine(controlsHelp());
             telemetry.update();
             sleep(20);
@@ -83,6 +93,9 @@ public class MecanumDrive extends LinearOpMode {
         int[] noCurrent = new int[4];   // readings in a row where a wheel was told to go but drew no current
         double volts = battery.getVoltage();
         boolean warnedBattery = false, warned30 = false;
+        boolean fieldMode = false, r3Was = false;
+        double fieldZero = 0;
+        String fieldNote = "";
         int loops = 0;
         ElapsedTime loopTimer = new ElapsedTime();
         ElapsedTime matchTimer = new ElapsedTime();
@@ -97,6 +110,41 @@ public class MecanumDrive extends LinearOpMode {
             // Thumbs are never perfectly straight: a push that's almost straight up/sideways becomes exactly that
             if (Math.abs(strafe) < SNAP * Math.abs(forward)) strafe = 0;
             if (Math.abs(forward) < SNAP * Math.abs(strafe)) forward = 0;
+            // Field mode: click the right stick down. The way the robot faces at that click becomes "away from me",
+            // and from then on pushing up drives that way, whichever way the robot is turned. Click again = normal.
+            boolean r3 = gamepad1.right_stick_button;
+            if (r3 && !r3Was) {
+                String why = fieldModeProblem(gyro, check);
+                if (fieldMode) {
+                    fieldMode = false;
+                    gamepad1.runRumbleEffect(FIELD_OFF);
+                    fieldNote = "";
+                } else if (!why.isEmpty()) {
+                    gamepad1.rumble(1.0, 0, 400);   // heavy thud: can't
+                    fieldNote = why;
+                } else {
+                    gyro.update();
+                    fieldZero = gyro.heading();
+                    fieldMode = true;
+                    gamepad1.rumble(0, 1.0, 600);   // one long light buzz: field mode on
+                    fieldNote = "";
+                }
+            }
+            r3Was = r3;
+            if (fieldMode) {
+                gyro.update();
+                if (!gyro.available()) {   // gyro dropped out mid-match: straight back to normal driving
+                    fieldMode = false;
+                    gamepad1.rumble(1.0, 0, 400);
+                    fieldNote = "Field mode turned off: " + gyro.problem();
+                } else {
+                    double turned = Math.toRadians(check.gyroSign * HeadingSensor.wrap(gyro.heading() - fieldZero));   // counterclockwise +
+                    double f = forward * Math.cos(turned) - strafe * Math.sin(turned);
+                    double s = strafe * Math.cos(turned) + forward * Math.sin(turned);
+                    forward = f;
+                    strafe = s;
+                }
+            }
             strafe *= 1.1;                                       // mecanum slides a bit weaker; small boost
             double turn  = deadzone(gamepad1.right_stick_x);
             double power = 1.0;
@@ -154,6 +202,8 @@ public class MecanumDrive extends LinearOpMode {
             for (String t : new String[] {flywheel.trouble(), intake.trouble(), rollers.trouble(), brake.trouble()}) {
                 if (!t.isEmpty()) telemetry.addLine(t);
             }
+            if (!fieldNote.isEmpty()) telemetry.addLine("<font color='#ffb74d'>" + fieldNote + "</font>");
+            if (fieldMode) telemetry.addLine(Pad.text("<big><font color='#4fc3f7'><b>FIELD MODE</b></font></big>  <small>(click right stick = normal)</small>"));
             String big = flywheel.matchLine();
             if (!big.isEmpty()) telemetry.addLine(big);
             String clockColor = left <= 10 ? "#ff5252" : left <= 30 ? "#ffb74d" : "#ffffff";
@@ -174,13 +224,20 @@ public class MecanumDrive extends LinearOpMode {
         rollers.stop();
     }
 
+    /** Why field mode can't turn on, or "" if it can. */
+    private static String fieldModeProblem(HeadingSensor gyro, SelfCheck check) {
+        if (!gyro.available()) return gyro.problem().isEmpty() ? "no gyro (needs the Pinpoint or the hub's imu in the configuration)" : gyro.problem();
+        if (check.gyroSign == 0) return "the gyro hasn't been checked yet: run Wheel Test step 3 once";
+        return "";
+    }
+
     private static double deadzone(double v) {
         return Math.abs(v) < DEADZONE ? 0 : v;
     }
 
     private static String controlsHelp() {
         return Pad.text("<small><font color='#9e9e9e'>Left stick: drive + slide · Right stick: spin · D-pad: nudge · "
-             + "{LT}/{LB}: intake in/out · {X}/{B}: rollers in/out · {RT}: flywheel (2 taps = stays on) · {Y}/{A}: flywheel speed · {BACK}: flywheel backward · {RB}: brake</font></small>");
+             + "{LT}/{LB}: intake in/out · {X}/{B}: rollers in/out · {RT}: flywheel (2 taps = stays on) · {Y}/{A}: flywheel speed · {BACK}: flywheel backward · {RB}: brake · right stick click: field mode</font></small>");
     }
 
     private static String wheel(double p) {

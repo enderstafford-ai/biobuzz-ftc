@@ -38,6 +38,7 @@ goBILDA 4-motor mecanum drive (belt-driven wheels), REV Control Hub + Expansion 
 | LT / LB | intake in / out | X | flywheel backward? flip |
 | RT (hold) | flywheel; screen says READY. Tap twice = stays on (2 quick buzzes), tap once = normal again (1 buzz) | | |
 | BACK / SHARE (hold) | flywheel slowly backward (stuck ball) | | |
+| R3 (click right stick) | field mode on/off: up = away from you. Point the robot away from you first | | |
 | Y / A | flywheel faster / slower | | |
 | RB (hold) | brake down, wheels stop | | |
 | X / B (hold) | rollers in / out | | |
