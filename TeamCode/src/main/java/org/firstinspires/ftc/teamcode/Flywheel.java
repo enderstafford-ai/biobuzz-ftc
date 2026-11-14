@@ -45,6 +45,7 @@ public class Flywheel {
     private long lastTapNs;
     private boolean spinning, buzzed;
     private boolean mayBeOn;   // a command failed while spinning: keep trying to stop it after RT is let go
+    private boolean encoderBackward; // encoder counts the opposite way the motor turns: the hub's speed control would just go full power
     private boolean noEncoder;       // encoder cable missing: run by plain power instead of chasing a speed it can't see
     private long spinStartedNs;
     private final Guard guard = new Guard("Flywheel");
@@ -143,7 +144,15 @@ public class Flywheel {
         }
         spinning = want;
 
-        rpm = Math.abs(motor.getVelocity()) / TICKS_PER_REV * 60;
+        double signedRpm = motor.getVelocity() / TICKS_PER_REV * 60;   // + = the way it's being driven
+        rpm = Math.abs(signedRpm);
+        // Encoder counting backward (motor power wires swapped, or a mismatched cable): the hub then thinks the wheel
+        // is going the wrong way, pushes full power forever, and changing the RPM does nothing. Control the speed here instead.
+        if (spinning && !noEncoder && !encoderBackward && signedRpm < -300) {
+            encoderBackward = true;
+            motor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+        }
+        if (spinning && encoderBackward) motor.setPower(ownSpeedControl());
         // Spinning 1.5 s and the encoder still reads ~0: its cable is out, and chasing the speed would mean full power
         if (spinning && !noEncoder && rpm < 200 && System.nanoTime() - spinStartedNs > ENCODER_CHECK_NS) {
             noEncoder = true;
@@ -152,8 +161,14 @@ public class Flywheel {
         }
     }
 
+    /** Power for the target speed, corrected by how far off the wheel is (used when the hub can't do it itself). */
+    private double ownSpeedControl() {
+        return Math.max(0, Math.min(1, targetRpm / FREE_RPM + 0.0004 * (targetRpm - rpm)));
+    }
+
     private void command() {
         if (noEncoder) motor.setPower(targetRpm / FREE_RPM);
+        else if (encoderBackward) motor.setPower(ownSpeedControl());
         else motor.setVelocity(targetRpm / 60.0 * TICKS_PER_REV);
     }
 
@@ -173,12 +188,13 @@ public class Flywheel {
         if (guard.isDown()) return "<font color='#ff5252'>" + guard.problem() + "</font>";
         if (noEncoder) return String.format("Flywheel: <font color='#ffb74d'>no encoder signal (plug its small cable into Expansion Hub encoder port 1)</font>, running at about %d RPM by power  %s",
                 targetRpm, spinning ? "<b>ON</b>" : Pad.text("<small>(hold {RT})</small>"));
+        String warn = encoderBackward ? "  <small><font color='#ffb74d'>(encoder counts backward: speed kept by the code)</font></small>" : "";
         String state = !spinning ? "off  <small>(hold {RT} · tap twice = stays on)</small>"
                 : locked && ready() ? "<font color='#69f0ae'><b>READY</b></font> <b>· STAYS ON</b>, feed with {LT} <small>(tap {RT} to stop)</small>"
                 : locked ? "<font color='#ffb74d'>spinning up</font> <b>· STAYS ON</b> <small>(tap {RT} to stop)</small>"
                 : ready() ? "<font color='#69f0ae'><b>READY</b></font>, feed with {LT}"
                 : "<font color='#ffb74d'>spinning up</font>";
-        return Pad.text(String.format("Flywheel: %s   %.0f / <b>%d RPM</b>  <small>({Y}/{A}: speed)</small>", state, rpm, targetRpm));
+        return Pad.text(String.format("Flywheel: %s   %.0f / <b>%d RPM</b>  <small>({Y}/{A}: speed)</small>%s", state, rpm, targetRpm, warn));
     }
 
     public String help() {
