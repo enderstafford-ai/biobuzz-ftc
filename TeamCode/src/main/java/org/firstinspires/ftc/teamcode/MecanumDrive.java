@@ -26,7 +26,7 @@ import java.util.Arrays;
  *   Right stick  spin                        D-pad ←/→    intake slower/faster
  *   D-pad        slow nudge                  D-pad ↑/↓    how far the brake goes down
  *   LT / LB      intake in / out             X            flywheel spinning backward? flip
- *   RT (hold)    flywheel; buzz = ready. Tap twice = stays on, tap once = normal again
+ *   RT (hold)    flywheel; screen says READY. Tap twice = stays on, tap once = normal again
  *   Y / A        flywheel faster / slower
  *   BACK (hold)  flywheel slowly backward: frees a ball stuck under it (SHARE on PlayStation-style)
  *   RB (hold)    brake down, wheels stop
