@@ -18,7 +18,7 @@ import org.firstinspires.ftc.robotcore.external.navigation.YawPitchRollAngles;
  * Backup: the gyro inside the Control Hub, named "imu". Only used when there's no working Pinpoint.
  * Neither working: the autonomous just stops steering itself straight; everything else carries on.
  *
- * Mecanum Drive does not use this at all (plain driving). The autonomous and Wheel Test do.
+ * Mecanum Drive reads it only while field mode is on (right stick click). The autonomous and Wheel Test use it too.
  *
  * Why the care: asking a sensor that doesn't answer, over and over, jams the Control Hub's
  * motor chip (motors stop, battery reads 0.00 V). So each sensor is checked once at INIT, and
