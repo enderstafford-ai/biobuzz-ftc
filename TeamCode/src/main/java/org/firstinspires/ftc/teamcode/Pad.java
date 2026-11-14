@@ -8,9 +8,9 @@ import com.qualcomm.robotcore.hardware.Gamepad;
  * screen differ, so screen text writes buttons as {A}, {LT} ... and Pad.text() names them for the controller in use.
  */
 final class Pad {
-    private static final String[] TOKENS      = {"{A}", "{B}", "{X}", "{Y}", "{LB}", "{RB}", "{LT}", "{RT}"};
-    private static final String[] XBOX        = {"A",   "B",   "X",   "Y",   "LB",   "RB",   "LT",   "RT"};
-    private static final String[] PLAYSTATION = {"✕",   "○",   "□",   "△",   "L1",   "R1",   "L2",   "R2"};
+    private static final String[] TOKENS      = {"{A}", "{B}", "{X}", "{Y}", "{LB}", "{RB}", "{LT}", "{RT}", "{BACK}"};
+    private static final String[] XBOX        = {"A",   "B",   "X",   "Y",   "LB",   "RB",   "LT",   "RT",   "BACK"};
+    private static final String[] PLAYSTATION = {"✕",   "○",   "□",   "△",   "L1",   "R1",   "L2",   "R2",   "SHARE"};
     private static volatile boolean playStation;
 
     private Pad() {}

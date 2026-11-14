@@ -17,6 +17,8 @@ import java.io.File;
  * Hold RT: flywheel spins up and holds its speed (the encoder keeps it there between shots), off when let go.
  *          The controller buzzes once when it's up to speed: then LT feeds balls in.
  * Tap RT twice quickly: it stays on without holding (two buzzes). One tap of RT: back to normal (hold to spin).
+ * Hold BACK (SHARE on PlayStation-style pads): flywheel turns slowly BACKWARD to free a ball stuck under it.
+ *          If the wheel is still spinning fast, it coasts down first.
  * Y / A: flywheel faster / slower (100 RPM steps), any time while driving.
  * The speed and direction are saved on the Control Hub.
  *
@@ -31,6 +33,8 @@ public class Flywheel {
     private static final int MIN_RPM = 1000, MAX_RPM = 5800, STEP_RPM = 100;
     private static final int READY_TOLERANCE_RPM = 100;
     private static final double FREE_RPM = 6000;              // motor's top speed, for running by power alone
+    private static final double BACKWARD_POWER = 0.3;          // slow, to roll a stuck ball back out
+    private static final double BACKWARD_ONLY_BELOW_RPM = 1000; // don't slam a fast wheel into reverse
     private static final long DOUBLE_TAP_NS = 400_000_000L;   // second tap within this = stay on
     private static final long ENCODER_CHECK_NS = 1_500_000_000L;   // spinning this long with no encoder counts = its cable is out
     private static final long INIT_TOO_SLOW_NS = 2 * Guard.INIT_TOO_SLOW_NS;   // INIT sends several commands, so allow double
@@ -41,6 +45,7 @@ public class Flywheel {
     private int targetRpm = START_RPM;
     private boolean reversed;
     private boolean xWas, yWas, aWas, rtWas;
+    private boolean reversing;
     private boolean locked;          // double-tapped: stays on until RT is tapped again
     private long lastTapNs;
     private boolean spinning, buzzed;
@@ -105,7 +110,9 @@ public class Flywheel {
             }
         }
         rtWas = held;
-        boolean want = held || locked;
+        boolean back = gamepad.back;
+        if (back) locked = false;
+        boolean want = (held || locked) && !back;
         boolean changed = false;
         boolean faster = gamepad.y && !yWas, slower = gamepad.a && !aWas;
         if (faster || slower) {
@@ -118,9 +125,9 @@ public class Flywheel {
         }
         yWas = gamepad.y;
         aWas = gamepad.a;
-        if (motor == null || !guard.ready(want || mayBeOn)) return;
+        if (motor == null || !guard.ready(want || back || reversing || mayBeOn)) return;
         boolean speedChanged = changed;
-        if (!guard.run(() -> drive(want, speedChanged))) {
+        if (!guard.run(() -> drive(want, speedChanged, back))) {
             spinning = false;   // hub not answering: start over next time
             mayBeOn = true;
         } else {
@@ -132,7 +139,22 @@ public class Flywheel {
         }
     }
 
-    private void drive(boolean want, boolean speedChanged) {
+    private void drive(boolean want, boolean speedChanged, boolean back) {
+        if (back) {
+            if (spinning) motor.setPower(0);   // let it coast first
+            spinning = false;
+            rpm = Math.abs(motor.getVelocity()) / TICKS_PER_REV * 60;
+            boolean slowEnough = noEncoder || rpm < BACKWARD_ONLY_BELOW_RPM;
+            if (slowEnough && !reversing) {
+                motor.setPower(-BACKWARD_POWER);
+                reversing = true;
+            }
+            return;
+        }
+        if (reversing) {
+            motor.setPower(0);
+            reversing = false;
+        }
         if (want && !spinning) {
             command();
             buzzed = false;
@@ -189,7 +211,8 @@ public class Flywheel {
         if (noEncoder) return String.format("Flywheel: <font color='#ffb74d'>no encoder signal (plug its small cable into Expansion Hub encoder port 1)</font>, running at about %d RPM by power  %s",
                 targetRpm, spinning ? "<b>ON</b>" : Pad.text("<small>(hold {RT})</small>"));
         String warn = encoderBackward ? "  <small><font color='#ffb74d'>(encoder counts backward: speed kept by the code)</font></small>" : "";
-        String state = !spinning ? "off  <small>(hold {RT} · tap twice = stays on)</small>"
+        String state = reversing ? "<font color='#4fc3f7'><b>BACKWARD</b></font> (freeing a stuck ball)"
+                : !spinning ? "off  <small>(hold {RT} · tap twice = stays on)</small>"
                 : locked && ready() ? "<font color='#69f0ae'><b>READY</b></font> <b>· STAYS ON</b>, feed with {LT} <small>(tap {RT} to stop)</small>"
                 : locked ? "<font color='#ffb74d'>spinning up</font> <b>· STAYS ON</b> <small>(tap {RT} to stop)</small>"
                 : ready() ? "<font color='#69f0ae'><b>READY</b></font>, feed with {LT}"
@@ -199,7 +222,7 @@ public class Flywheel {
 
     public String help() {
         if (motor == null) return problem;
-        return Pad.text("Flywheel: hold {RT} to spin (" + targetRpm + " RPM), tap {RT} twice = stays on, tap once = back to normal, {Y}/{A} = speed. Spinning the wrong way? Press {X} now.");
+        return Pad.text("Flywheel: hold {RT} to spin (" + targetRpm + " RPM), tap {RT} twice = stays on, tap once = back to normal, hold {BACK} = slowly backward (stuck ball), {Y}/{A} = speed. Spinning the wrong way? Press {X} now.");
     }
 
     private void load() {
